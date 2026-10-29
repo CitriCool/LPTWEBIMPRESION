@@ -53,13 +53,13 @@ docker compose exec app npm run probar-correo -- su-correo@ejemplo.cl
 
 Qué correos se envían:
 
-- **Pedido nuevo:** aviso a los correos internos de `MAIL_LPT` con los datos del cliente,
+- **Pedido nuevo:** aviso a los correos internos del equipo (definidos en `.env`) con los datos del cliente,
   el total, el enlace al panel y el PDF adjunto (`MAIL_ADJUNTAR_PDF`, hasta `MAIL_ADJUNTAR_MAX_MB`).
   Responder ese correo le escribe directo al cliente.
 - **Confirmación al cliente:** código de pedido, total e instrucciones de pago.
-- **Comprobante recibido:** aviso a `MAIL_LPT` con la boleta adjunta, para revisarla en el panel.
-- **Pago verificado o rechazado:** al cliente (con copia oculta a `MAIL_LPT`); si se rechaza, lleva el motivo y el enlace para subir otro.
-- **Cambio de estado:** al cliente (si se marca en el panel) y a `MAIL_LPT`.
+- **Comprobante recibido:** aviso al equipo con la boleta adjunta, para revisarla en el panel.
+- **Pago verificado o rechazado:** al cliente (con copia oculta al equipo); si se rechaza, lleva el motivo y el enlace para subir otro.
+- **Cambio de estado:** al cliente (si se marca en el panel) y al equipo.
 
 ### Comprobante de pago
 
@@ -120,7 +120,7 @@ app/
 ```bash
 docker compose logs -f app                          # ver actividad y correos
 docker compose exec app npm run crear-usuario -- "Nombre" correo@ejemplo.cl "clave-de-10+" operador
-docker compose exec db mariadb-dump -uroot -p lpt_impresion > respaldo.sql   # respaldo de la base
+docker compose exec db sh -c 'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' > respaldo.sql   # respaldo de la base
 ```
 
 Los PDF se guardan en el volumen `uploads`; respáldelo junto con la base.
