@@ -54,7 +54,14 @@ app.use('/admin/api', require('./routes/admin'));
 app.get('/vendor/pdf-lib.min.js', (req, res) =>
   res.sendFile(require.resolve('pdf-lib/dist/pdf-lib.min.js'), { maxAge: '7d' })
 );
-app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], maxAge: config.production ? '1h' : 0 }));
+// no-cache: el navegador revalida con ETag (respuesta 304 si no cambió), así una
+// actualización del sitio o del panel se ve de inmediato sin Ctrl+F5
+app.use(
+  express.static(path.join(__dirname, '..', 'public'), {
+    extensions: ['html'],
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  })
+);
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 app.use('/admin/api', (req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
