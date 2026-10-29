@@ -86,7 +86,7 @@ router.post('/pedidos', limitePedidos, (req, res, next) => {
       });
 
       // Los correos se envían en segundo plano para no hacer esperar al cliente
-      mailer.pedidoRecibido(pedido).catch((e) => console.error(e));
+      mailer.pedidoRecibido(pedido, req.file.buffer).catch((e) => console.error(e));
 
       res.status(201).json({
         codigo: pedido.codigo,

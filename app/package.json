@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test",
-    "crear-usuario": "node scripts/crear-usuario.js"
+    "crear-usuario": "node scripts/crear-usuario.js",
+    "probar-correo": "node scripts/probar-correo.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

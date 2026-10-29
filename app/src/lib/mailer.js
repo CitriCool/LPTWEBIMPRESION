@@ -64,7 +64,27 @@ function tablaPedido(p) {
     .join('')}</table>`;
 }
 
-async function pedidoRecibido(p) {
+/** Comprueba la conexión SMTP. Devuelve null si está bien o el mensaje de error. */
+async function verificar() {
+  if (!config.mail.host) return 'SMTP_HOST no está configurado: los correos solo se muestran en el log.';
+  try {
+    await transporte.verify();
+    return null;
+  } catch (e) {
+    return e.message;
+  }
+}
+
+function adjuntoPdf(p, pdf) {
+  if (!pdf || !config.mail.adjuntarPdf || pdf.length > config.mail.adjuntarMaxBytes) return null;
+  return { filename: `${p.codigo}-${p.archivo_nombre}`, content: pdf, contentType: 'application/pdf' };
+}
+
+/**
+ * Avisa al cliente (confirmación con instrucciones de pago) y al equipo LPT
+ * (aviso de pedido nuevo, con el PDF adjunto si no supera el límite).
+ */
+async function pedidoRecibido(p, pdf) {
   const pago = instruccionesPago(p.metodo_pago, p.codigo);
   const seguimiento = `${config.publicUrl}/#seguimiento`;
 
@@ -80,17 +100,21 @@ async function pedidoRecibido(p) {
     text: `Pedido ${p.codigo} recibido. Total ${f.clp(p.total_clp)}. ${pago}`,
   });
 
+  const adjunto = adjuntoPdf(p, pdf);
+  const panel = `${config.publicUrl}/admin/#pedido/${p.id}`;
   await enviar({
     to: config.mail.lpt.join(','),
     replyTo: p.cliente_email,
+    attachments: adjunto ? [adjunto] : undefined,
     subject: `[Nuevo pedido] ${p.codigo} · ${p.papel_nombre} · ${f.clp(p.total_clp)}`,
     html: plantilla(`Nuevo pedido ${p.codigo}`, `
       <p><b>${f.escapar(p.cliente_nombre)}</b> (${f.escapar(p.cliente_rut)})<br>
       ${f.escapar(p.cliente_email)} · ${f.escapar(p.cliente_telefono)}${p.cliente_unidad ? `<br>${f.escapar(p.cliente_unidad)}` : ''}</p>
       ${tablaPedido(p)}
       ${p.observaciones ? `<p><b>Observaciones:</b> ${f.escapar(p.observaciones)}</p>` : ''}
-      <p><a href="${config.publicUrl}/admin/#pedido/${p.id}">Ver en el panel de administración</a></p>`),
-    text: `Nuevo pedido ${p.codigo} de ${p.cliente_nombre}. Total ${f.clp(p.total_clp)}.`,
+      <p>${adjunto ? 'El PDF va adjunto a este correo. ' : 'El PDF se descarga desde el panel. '}
+      <a href="${panel}">Ver en el panel de administración</a></p>`),
+    text: `Nuevo pedido ${p.codigo} de ${p.cliente_nombre}. Total ${f.clp(p.total_clp)}. Panel: ${panel}`,
   });
 }
 
@@ -119,4 +143,4 @@ async function cambioEstado(p, estado, comentario, notificarCliente) {
   });
 }
 
-module.exports = { pedidoRecibido, cambioEstado, instruccionesPago };
+module.exports = { pedidoRecibido, cambioEstado, instruccionesPago, verificar, enviar, plantilla };

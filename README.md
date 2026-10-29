@@ -36,12 +36,29 @@ Si la universidad ya tiene un Nginx/Apache, omita el perfil y haga `proxy_pass` 
 
 ### Correo
 
-Configure `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` con la cuenta institucional (Office 365:
-`smtp.office365.com`, puerto 587). Mientras `SMTP_HOST` esté vacío, los correos no salen y
-quedan registrados en `docker compose logs app`, lo que sirve para probar.
+Configure `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` con la cuenta que enviará los avisos:
 
-Se envían correos a `MAIL_LPT` (rcallejas@uct.cl y lpt@uct.cl) y al cliente:
-al recibir un pedido (con instrucciones de pago) y en cada cambio de estado.
+| Cuenta | `SMTP_HOST` | `SMTP_PORT` | Clave |
+|---|---|---|---|
+| Office 365 (cuenta @uct.cl) | `smtp.office365.com` | 587 | la de la cuenta (TI debe tener SMTP AUTH habilitado) |
+| Gmail | `smtp.gmail.com` | 587 | una [contraseña de aplicación](https://myaccount.google.com/apppasswords) |
+
+`MAIL_FROM` debe usar la misma dirección que `SMTP_USER`, o el servidor puede rechazar el envío.
+Mientras `SMTP_HOST` esté vacío, los correos no salen y quedan registrados en
+`docker compose logs app`, lo que sirve para probar. Al arrancar, la app indica en el log si el
+SMTP responde. Para comprobarlo a mano:
+
+```bash
+docker compose exec app npm run probar-correo -- su-correo@uct.cl
+```
+
+Qué correos se envían:
+
+- **Pedido nuevo:** aviso a `MAIL_LPT` (rcallejas@uct.cl y lpt@uct.cl) con los datos del cliente,
+  el total, el enlace al panel y el PDF adjunto (`MAIL_ADJUNTAR_PDF`, hasta `MAIL_ADJUNTAR_MAX_MB`).
+  Responder ese correo le escribe directo al cliente.
+- **Confirmación al cliente:** código de pedido, total e instrucciones de pago.
+- **Cambio de estado:** al cliente (si se marca en el panel) y a `MAIL_LPT`.
 
 ## Cómo funciona
 
