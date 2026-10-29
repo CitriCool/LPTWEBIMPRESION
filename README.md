@@ -1,10 +1,9 @@
-# Servicio de Impresión LPT · UCT
+# Servicio de Impresión Web
 
-Sistema web para recibir, cotizar y gestionar los pedidos de impresión y ploteo del
-**Laboratorio de Planificación Territorial (LPT) de la Universidad Católica de Temuco**.
+Sistema web para recibir, cotizar y gestionar pedidos de impresión y ploteo de gran formato.
 Reemplaza el envío de archivos por correo: el cliente sube su PDF, ve el precio exacto,
-recibe instrucciones de pago (SCC 251-1148) y un código para seguir su pedido. El
-equipo LPT gestiona todo desde un panel interno.
+recibe instrucciones de pago y un código para seguir su pedido. El equipo de impresión
+gestiona todo desde un panel interno.
 
 ## Puesta en marcha
 
@@ -16,14 +15,14 @@ docker compose up -d --build
 ```
 
 - Sitio público: http://localhost:3000
-- Panel LPT: http://localhost:3000/admin (usuario y clave de `ADMIN_EMAIL` / `ADMIN_PASSWORD`)
+- Panel interno: http://localhost:3000/admin (usuario y clave de `ADMIN_EMAIL` / `ADMIN_PASSWORD`)
 
 La primera vez, MariaDB ejecuta `db/schema.sql` (tablas, papeles, precios y estados) y la
 aplicación crea el administrador inicial.
 
 ### Producción con dominio propio
 
-1. Apunte el DNS del dominio (p. ej. `impresion.lpt.uct.cl`) al servidor y abra los puertos 80 y 443.
+1. Apunte el DNS del dominio (p. ej. `impresion.ejemplo.cl`) al servidor y abra los puertos 80 y 443.
 2. En `.env` defina `DOMINIO`, `PUBLIC_URL=https://<dominio>` y `COOKIE_SECURE=true`.
 3. Levante con el proxy Caddy, que obtiene y renueva el certificado HTTPS solo:
 
@@ -31,7 +30,7 @@ aplicación crea el administrador inicial.
 docker compose --profile produccion up -d --build
 ```
 
-Si la universidad ya tiene un Nginx/Apache, omita el perfil y haga `proxy_pass` a
+Si su organización ya tiene un Nginx/Apache, omita el perfil y haga `proxy_pass` a
 `http://<servidor>:3000` (con `client_max_body_size 20m`).
 
 ### Correo
@@ -40,7 +39,7 @@ Configure `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` con la cuenta que enviará los a
 
 | Cuenta | `SMTP_HOST` | `SMTP_PORT` | Clave |
 |---|---|---|---|
-| Office 365 (cuenta @uct.cl) | `smtp.office365.com` | 587 | la de la cuenta (TI debe tener SMTP AUTH habilitado) |
+| Office 365 / Microsoft 365 | `smtp.office365.com` | 587 | la de la cuenta (el administrador debe tener SMTP AUTH habilitado) |
 | Gmail | `smtp.gmail.com` | 587 | una [contraseña de aplicación](https://myaccount.google.com/apppasswords) |
 
 `MAIL_FROM` debe usar la misma dirección que `SMTP_USER`, o el servidor puede rechazar el envío.
@@ -49,12 +48,12 @@ Mientras `SMTP_HOST` esté vacío, los correos no salen y quedan registrados en
 SMTP responde. Para comprobarlo a mano:
 
 ```bash
-docker compose exec app npm run probar-correo -- su-correo@uct.cl
+docker compose exec app npm run probar-correo -- su-correo@ejemplo.cl
 ```
 
 Qué correos se envían:
 
-- **Pedido nuevo:** aviso a `MAIL_LPT` (rcallejas@uct.cl y lpt@uct.cl) con los datos del cliente,
+- **Pedido nuevo:** aviso a los correos internos de `MAIL_LPT` con los datos del cliente,
   el total, el enlace al panel y el PDF adjunto (`MAIL_ADJUNTAR_PDF`, hasta `MAIL_ADJUNTAR_MAX_MB`).
   Responder ese correo le escribe directo al cliente.
 - **Confirmación al cliente:** código de pedido, total e instrucciones de pago.
@@ -81,7 +80,7 @@ Las bases creadas con una versión anterior se actualizan solas al arrancar la a
 | Cotizador rápido | El cliente ingresa ancho × alto en cm, papel y copias; ve el precio referencial. |
 | Envío del PDF | El navegador lee las medidas reales del PDF y muestra el precio antes de enviar. |
 | Recepción | El servidor **vuelve a leer el PDF** y calcula el precio definitivo; las medidas del cliente no se usan para cobrar. |
-| Confirmación | Código `LPT-AAAA-NNNNN`, total, fecha estimada (2 días hábiles) e instrucciones de pago con el SCC 251-1148. |
+| Confirmación | Código de pedido (`XXX-AAAA-NNNNN`), total, fecha estimada (2 días hábiles) e instrucciones de pago. |
 | Panel | Lista con filtros por estado y búsqueda, detalle, descarga del PDF, cambio de estado con comentario, notas internas e historial. |
 
 ### Reglas de negocio (`app/src/config.js`)
@@ -120,7 +119,7 @@ app/
 
 ```bash
 docker compose logs -f app                          # ver actividad y correos
-docker compose exec app npm run crear-usuario -- "Nombre" correo@uct.cl "clave-de-10+" operador
+docker compose exec app npm run crear-usuario -- "Nombre" correo@ejemplo.cl "clave-de-10+" operador
 docker compose exec db mariadb-dump -uroot -p lpt_impresion > respaldo.sql   # respaldo de la base
 ```
 
