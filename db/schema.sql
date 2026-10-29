@@ -130,6 +130,53 @@ CREATE TABLE IF NOT EXISTS historial_estados (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
+-- Préstamo de equipos: categorías, equipos (lo que se ofrece) y unidades
+-- (cada aparato físico, con su n° de inventario y su etiqueta QR)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS equipos_categorias (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  nombre          VARCHAR(80) NOT NULL,
+  orden           SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  activo          TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_categoria_nombre (nombre)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS equipos (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  categoria_id    INT UNSIGNED NOT NULL,
+  nombre          VARCHAR(120) NOT NULL,
+  marca_modelo    VARCHAR(120) NULL,
+  descripcion     VARCHAR(1000) NULL,
+  accesorios      VARCHAR(500) NULL,                         -- lo que se entrega junto al equipo
+  garantia        VARCHAR(255) NULL,                         -- lo que deja quien lo pide, ej. credencial UCT
+  tarifa_dia_clp  INT UNSIGNED NOT NULL DEFAULT 0,           -- 0 = préstamo sin costo
+  dias_max        SMALLINT UNSIGNED NOT NULL DEFAULT 3,
+  activo          TINYINT(1) NOT NULL DEFAULT 1,
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_equipo_categoria (categoria_id),
+  CONSTRAINT fk_equipo_categoria FOREIGN KEY (categoria_id) REFERENCES equipos_categorias (id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS equipos_unidades (
+  id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  equipo_id       INT UNSIGNED NOT NULL,
+  inventario      VARCHAR(40) NOT NULL,                      -- n° de inventario UCT
+  serie           VARCHAR(80) NULL,
+  qr_token        CHAR(12) NOT NULL,                         -- aleatorio: el QR apunta a /q/<token>
+  estado          ENUM('disponible', 'prestado', 'mantencion', 'baja') NOT NULL DEFAULT 'disponible',
+  ubicacion       VARCHAR(120) NULL,
+  notas           VARCHAR(1000) NULL,
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_unidad_inventario (inventario),
+  UNIQUE KEY uq_unidad_qr (qr_token),
+  KEY idx_unidad_equipo (equipo_id, estado),
+  CONSTRAINT fk_unidad_equipo FOREIGN KEY (equipo_id) REFERENCES equipos (id)
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
 -- Datos iniciales
 -- ---------------------------------------------------------------------
 INSERT INTO servicios_papel (codigo, nombre, descripcion, precio_m2, orden) VALUES
@@ -144,6 +191,11 @@ INSERT INTO estados_pedido (id, codigo, nombre, descripcion, orden, es_final, no
   (3, 'listo',       'Listo para retirar',  'Puede retirarse en el LPT',                   3, 0, 1),
   (4, 'entregado',   'Entregado',           'Pedido retirado por el cliente',              4, 1, 1),
   (5, 'cancelado',   'Cancelado',           'Pedido anulado',                              5, 1, 1)
+ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
+
+INSERT INTO equipos_categorias (nombre, orden) VALUES
+  ('Notebooks', 1),
+  ('Drones',    2)
 ON DUPLICATE KEY UPDATE nombre = VALUES(nombre);
 
 -- El primer usuario administrador NO se crea aquí: la aplicación lo crea al

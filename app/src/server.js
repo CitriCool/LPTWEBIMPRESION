@@ -49,6 +49,8 @@ app.get('/salud', async (req, res) => {
 
 app.use('/api', require('./routes/publico'));
 app.use('/admin/api', require('./routes/admin'));
+// Destino de las etiquetas QR pegadas en los equipos de préstamo
+app.use('/q', require('./routes/qr'));
 
 // pdf-lib en el navegador: lee las medidas del PDF antes de enviarlo
 app.get('/vendor/pdf-lib.min.js', (req, res) =>

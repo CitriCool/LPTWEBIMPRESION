@@ -73,6 +73,21 @@ Qué correos se envían:
 
 Las bases creadas con una versión anterior se actualizan solas al arrancar la app (`src/lib/migraciones.js`).
 
+### Equipos en préstamo (inventario y etiquetas QR)
+
+En el panel, la pestaña *Equipos* registra lo que se presta (notebooks, drones, etc.):
+
+- **Equipo:** categoría, nombre, accesorios, garantía que se deja, tarifa por día (0 = sin costo) y plazo máximo.
+- **Unidad:** cada aparato físico, con su n° de inventario, n° de serie, ubicación y estado
+  (disponible, prestado, en mantención, de baja).
+- **Etiquetas QR:** se imprimen por equipo o por unidad. El QR apunta a `PUBLIC_URL/q/<código>`: un
+  operador con sesión iniciada llega directo a la ficha de la unidad; cualquier otra persona solo ve
+  qué equipo es y a quién devolverlo. Si una etiqueta se pierde, "generar QR nuevo" anula la anterior.
+  Defina `PUBLIC_URL` con el dominio real antes de imprimir etiquetas.
+
+Cualquier operador consulta el inventario; solo un administrador lo modifica. Las solicitudes de
+préstamo, la entrega y la devolución escaneando el QR vienen en las próximas fases.
+
 ## Cómo funciona
 
 | Paso | Qué ocurre |
@@ -98,7 +113,8 @@ Las bases creadas con una versión anterior se actualizan solas al arrancar la a
 ```
 docker-compose.yml       MariaDB + app (+ Caddy en perfil "produccion")
 .env.example             variables de configuración
-db/schema.sql            usuarios, servicios_papel, estados_pedido, cotizaciones_pedidos, historial_estados
+db/schema.sql            usuarios, servicios_papel, estados_pedido, cotizaciones_pedidos, historial_estados,
+                         equipos_categorias, equipos, equipos_unidades
 caddy/Caddyfile          proxy HTTPS para el dominio
 app/
   Dockerfile
@@ -109,8 +125,11 @@ app/
   src/lib/pedidos.js     acceso a datos de pedidos, papeles y estados
   src/lib/mailer.js      plantillas y envío de correos
   src/lib/validacion.js  datos del cliente y RUT chileno
+  src/lib/equipos.js     inventario de equipos en préstamo y QR de cada unidad
   src/routes/publico.js  /api/config, /api/cotizar, /api/pedidos, /api/seguimiento
   src/routes/admin.js    /admin/api/* (login, pedidos, estados, archivo, papeles, usuarios)
+  src/routes/equipos.js  /admin/api/equipos y /admin/api/unidades (inventario y etiquetas)
+  src/routes/qr.js       /q/<código>, destino del QR pegado en cada equipo
   public/                sitio público y panel (HTML + CSS + JS sin framework)
   test/                  pruebas del cálculo, lectura de PDF y RUT (npm test)
 ```
