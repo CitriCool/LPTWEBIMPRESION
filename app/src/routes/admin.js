@@ -6,6 +6,7 @@ const pedidos = require('../lib/pedidos');
 const usuarios = require('../lib/usuarios');
 const mailer = require('../lib/mailer');
 const { limpiar } = require('../lib/validacion');
+const { ErrorCotizacion } = require('../lib/cotizador');
 
 const router = express.Router();
 
@@ -58,7 +59,8 @@ router.get('/me', (req, res) => res.json(req.session.usuario));
 
 router.get('/resumen', async (req, res, next) => {
   try {
-    res.json({ estados: await pedidos.resumenEstados() });
+    const [estados, pagosPorRevisar] = await Promise.all([pedidos.resumenEstados(), pedidos.pagosPorRevisar()]);
+    res.json({ estados, pagos_por_revisar: pagosPorRevisar });
   } catch (e) {
     next(e);
   }
@@ -77,6 +79,7 @@ router.get('/pedidos', async (req, res, next) => {
     res.json(
       await pedidos.listarPedidos({
         estado: limpiar(req.query.estado, 30) || null,
+        pago: limpiar(req.query.pago, 30) || null,
         q: limpiar(req.query.q, 80) || null,
         pagina: req.query.pagina,
         limite: req.query.limite,
@@ -100,7 +103,7 @@ async function cargarPedido(req, res, next) {
 
 router.get('/pedidos/:id', cargarPedido, async (req, res, next) => {
   try {
-    const { archivo_ruta, ...p } = req.pedido;
+    const { archivo_ruta, comprobante_ruta, ...p } = req.pedido;
     res.json({ ...p, historial: await pedidos.historial(p.id) });
   } catch (e) {
     next(e);
@@ -113,6 +116,32 @@ router.get('/pedidos/:id/archivo', cargarPedido, (req, res, next) => {
   res.download(pedidos.rutaArchivo(p), nombre, { headers: { 'Content-Type': 'application/pdf' } }, (err) => {
     if (err && !res.headersSent) next(Object.assign(new Error('El archivo ya no está disponible.'), { status: 404, publico: true }));
   });
+});
+
+router.get('/pedidos/:id/comprobante', cargarPedido, (req, res, next) => {
+  const p = req.pedido;
+  const ruta = pedidos.rutaComprobante(p);
+  if (!ruta) return res.status(404).json({ error: 'El pedido no tiene comprobante.' });
+  // Se muestra en el navegador (inline) para revisarlo sin descargarlo. El visor de
+  // PDF de Chrome no carga con la CSP general (object-src 'none'); el tipo del archivo
+  // ya se validó por su contenido al subirlo y X-Frame-Options sigue limitando el marco.
+  res.removeHeader('Content-Security-Policy');
+  res.sendFile(ruta, { headers: { 'Content-Type': p.comprobante_mime, 'Content-Disposition': 'inline' } }, (err) => {
+    if (err && !res.headersSent) next(Object.assign(new Error('El comprobante ya no está disponible.'), { status: 404, publico: true }));
+  });
+});
+
+router.patch('/pedidos/:id/pago', cargarPedido, async (req, res, next) => {
+  try {
+    const verificado = req.body?.accion === 'verificar';
+    if (!verificado && req.body?.accion !== 'rechazar') throw new ErrorCotizacion('Acción inválida.');
+    const comentario = limpiar(req.body?.comentario, 500) || null;
+    const pedido = await pedidos.revisarPago(req.pedido, verificado, req.session.usuario.id, comentario);
+    mailer.pagoRevisado(pedido, verificado, comentario).catch((e) => console.error(e));
+    res.json({ ok: true, pago_estado: pedido.pago_estado });
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.patch('/pedidos/:id/estado', cargarPedido, async (req, res, next) => {

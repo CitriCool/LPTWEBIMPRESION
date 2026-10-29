@@ -121,6 +121,14 @@ legend { font-size: 1.15rem; font-weight: 700; margin-bottom: .8rem; color: var(
 .estado-listo { background: #dcf5e8; color: var(--ok); }
 .estado-entregado { background: #eceff3; color: #3d4654; }
 .estado-cancelado { background: #fdecea; color: var(--error); }
+.pago-sin_comprobante { background: #eceff3; color: #3d4654; }
+.pago-por_revisar { background: #fff4d6; color: #8a5a00; }
+.pago-verificado { background: #dcf5e8; color: var(--ok); }
+.pago-rechazado { background: #fdecea; color: var(--error); }
+.pago-seguimiento { grid-column: 1 / -1; }
+.pago-seguimiento form { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end; margin-top: 1rem; }
+.pago-seguimiento .alerta { margin: 0; }
+.comprobante-vista { width: 100%; max-height: 520px; border: 1px solid var(--borde); border-radius: 8px; object-fit: contain; background: var(--fondo); }
 
 .pie { background: var(--azul-osc); color: #dbe5f5; padding: 2rem 0; margin-top: 2rem; font-size: .92rem; }
 .pie a { color: var(--blanco); }
@@ -131,7 +139,7 @@ legend { font-size: 1.15rem; font-weight: 700; margin-bottom: .8rem; color: var(
   .cotizador .form-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
-  .form-grid, .opciones-pago, .cotizador .form-grid { grid-template-columns: 1fr; }
+  .form-grid, .opciones-pago, .cotizador .form-grid, .pago-seguimiento form { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
   .nav { gap: .7rem; font-size: .9rem; }
   .hero { padding: 2.5rem 0; }

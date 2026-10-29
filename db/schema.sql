@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS cotizaciones_pedidos (
   archivo_ruta          VARCHAR(255) NOT NULL,              -- nombre interno en el volumen
   archivo_bytes         INT UNSIGNED NOT NULL,
   archivo_sha256        CHAR(64) NOT NULL,
+  -- Pago: el cliente sube el comprobante después de pagar y el LPT lo revisa
+  pago_estado           ENUM('sin_comprobante', 'por_revisar', 'verificado', 'rechazado') NOT NULL DEFAULT 'sin_comprobante',
+  comprobante_nombre    VARCHAR(255) NULL,
+  comprobante_ruta      VARCHAR(255) NULL,
+  comprobante_mime      VARCHAR(40)  NULL,
+  comprobante_bytes     INT UNSIGNED NULL,
+  comprobante_subido_en DATETIME NULL,
+  pago_revisado_por     INT UNSIGNED NULL,
+  pago_revisado_en      DATETIME NULL,
+  pago_comentario       VARCHAR(500) NULL,
   -- Gestión
   estado_id             TINYINT UNSIGNED NOT NULL DEFAULT 1,
   notas_internas        TEXT NULL,
@@ -95,8 +105,10 @@ CREATE TABLE IF NOT EXISTS cotizaciones_pedidos (
   UNIQUE KEY uq_pedido_codigo (codigo),
   KEY idx_pedido_estado (estado_id, creado_en),
   KEY idx_pedido_email (cliente_email),
+  KEY idx_pedido_pago (pago_estado),
   CONSTRAINT fk_pedido_papel  FOREIGN KEY (papel_id)  REFERENCES servicios_papel (id),
   CONSTRAINT fk_pedido_estado FOREIGN KEY (estado_id) REFERENCES estados_pedido (id),
+  CONSTRAINT fk_pedido_revisor FOREIGN KEY (pago_revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL,
   CONSTRAINT chk_ancho CHECK (ancho_m > 0 AND ancho_m <= 1.000),
   CONSTRAINT chk_copias CHECK (copias BETWEEN 1 AND 100)
 ) ENGINE=InnoDB;

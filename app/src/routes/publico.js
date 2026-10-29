@@ -21,6 +21,16 @@ const subida = multer({
   },
 });
 
+const TIPOS_COMPROBANTE = /\.(pdf|jpe?g|png)$/i;
+const subidaComprobante = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: reglas.comprobanteMaxBytes, files: 1, fields: 5 },
+  fileFilter(req, file, cb) {
+    const valido = ['application/pdf', 'image/jpeg', 'image/png'].includes(file.mimetype) || TIPOS_COMPROBANTE.test(file.originalname);
+    cb(valido ? null : new ErrorCotizacion('El comprobante debe ser un PDF, JPG o PNG.'), valido);
+  },
+});
+
 const limitePedidos = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 20,
@@ -48,6 +58,7 @@ router.get('/config', async (req, res, next) => {
         scc: reglas.scc,
         metodosPago: reglas.metodosPago,
         correos: config.mail.lpt,
+        comprobanteMaxMb: reglas.comprobanteMaxBytes / 1024 / 1024,
       },
     });
   } catch (e) {
@@ -124,11 +135,39 @@ router.post('/seguimiento', limiteConsultas, async (req, res, next) => {
       total_clp: p.total_clp,
       creado_en: p.creado_en,
       fecha_entrega_estimada: p.fecha_entrega_estimada,
+      metodo_pago_nombre: reglas.metodosPago[p.metodo_pago],
+      instrucciones_pago: mailer.instruccionesPago(p.metodo_pago, p.codigo),
+      pago_estado: p.pago_estado,
+      pago_comentario: p.pago_estado === 'rechazado' ? p.pago_comentario : null,
+      comprobante_nombre: p.comprobante_nombre,
+      acepta_comprobante: pedidos.aceptaComprobante(p),
       historial: hist.map((h) => ({ fecha: h.creado_en, estado: h.estado })),
     });
   } catch (e) {
     next(e);
   }
+});
+
+/** El cliente sube la boleta o comprobante de traspaso, identificándose con código + correo. */
+router.post('/pedidos/comprobante', limitePedidos, (req, res, next) => {
+  subidaComprobante.single('archivo')(req, res, async (err) => {
+    try {
+      if (err) {
+        if (err.code === 'LIMIT_FILE_SIZE') throw new ErrorCotizacion(`El comprobante supera el máximo de ${reglas.comprobanteMaxBytes / 1024 / 1024} MB.`);
+        throw err;
+      }
+      const { codigo, email } = req.body || {};
+      const p = codigo && email ? await pedidos.buscarPorCodigoYEmail(codigo, email) : null;
+      if (!p) return res.status(404).json({ error: 'No encontramos un pedido con ese código y correo.' });
+      if (!req.file) throw new ErrorCotizacion('Adjunte la boleta o el comprobante de pago.');
+
+      const actualizado = await pedidos.guardarComprobante(p, req.file);
+      mailer.comprobanteRecibido(actualizado, req.file.buffer).catch((e) => console.error(e));
+      res.status(201).json({ ok: true, pago_estado: actualizado.pago_estado });
+    } catch (e) {
+      next(e);
+    }
+  });
 });
 
 module.exports = router;

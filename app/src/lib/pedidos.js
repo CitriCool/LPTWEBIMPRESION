@@ -95,12 +95,16 @@ async function buscarPorCodigoYEmail(codigo, email) {
   return p || null;
 }
 
-async function listarPedidos({ estado, q, limite = 50, pagina = 1 }) {
+async function listarPedidos({ estado, pago, q, limite = 50, pagina = 1 }) {
   const where = [];
   const params = [];
   if (estado) {
     where.push('e.codigo = ?');
     params.push(estado);
+  }
+  if (pago) {
+    where.push('p.pago_estado = ?');
+    params.push(pago);
   }
   if (q) {
     where.push('(p.codigo LIKE ? OR p.cliente_nombre LIKE ? OR p.cliente_email LIKE ? OR p.cliente_rut LIKE ?)');
@@ -131,6 +135,14 @@ async function resumenEstados() {
   );
 }
 
+async function pagosPorRevisar() {
+  const [{ cantidad }] = await query(
+    `SELECT COUNT(*) AS cantidad FROM cotizaciones_pedidos p JOIN estados_pedido e ON e.id = p.estado_id
+     WHERE p.pago_estado = 'por_revisar' AND e.es_final = 0`
+  );
+  return cantidad;
+}
+
 async function historial(pedidoId) {
   return query(
     `SELECT h.creado_en, h.comentario, e.nombre AS estado, u.nombre AS usuario
@@ -145,6 +157,10 @@ async function historial(pedidoId) {
 async function cambiarEstado(pedidoId, estadoId, usuarioId, comentario) {
   const [estado] = await query('SELECT * FROM estados_pedido WHERE id = ?', [estadoId]);
   if (!estado) throw new ErrorCotizacion('Estado inválido.');
+  const [actual] = await query('SELECT pago_estado FROM cotizaciones_pedidos WHERE id = ?', [pedidoId]);
+  if (actual && actual.pago_estado !== 'verificado' && config.reglas.estadosConPago.includes(estado.codigo)) {
+    throw new ErrorCotizacion(`Verifique el pago antes de pasar el pedido a "${estado.nombre}".`);
+  }
   await transaccion(async (conn) => {
     const [r] = await conn.query('UPDATE cotizaciones_pedidos SET estado_id = ? WHERE id = ?', [estadoId, pedidoId]);
     if (r.affectedRows === 0) throw Object.assign(new Error('Pedido no encontrado'), { status: 404, publico: true });
@@ -160,10 +176,90 @@ async function guardarNotas(pedidoId, notas) {
   await query('UPDATE cotizaciones_pedidos SET notas_internas = ? WHERE id = ?', [notas || null, pedidoId]);
 }
 
-function rutaArchivo(pedido) {
-  const ruta = path.resolve(config.uploadDir, pedido.archivo_ruta);
+function rutaSegura(relativa) {
+  const ruta = path.resolve(config.uploadDir, relativa);
   if (!ruta.startsWith(path.resolve(config.uploadDir) + path.sep)) throw new Error('Ruta de archivo inválida');
   return ruta;
+}
+
+function rutaArchivo(pedido) {
+  return rutaSegura(pedido.archivo_ruta);
+}
+
+function rutaComprobante(pedido) {
+  return pedido.comprobante_ruta ? rutaSegura(pedido.comprobante_ruta) : null;
+}
+
+// Se reconoce el tipo por los primeros bytes, no por el nombre que envía el navegador
+const TIPOS_COMPROBANTE = [
+  { firma: Buffer.from('%PDF'), ext: 'pdf', mime: 'application/pdf' },
+  { firma: Buffer.from([0xff, 0xd8, 0xff]), ext: 'jpg', mime: 'image/jpeg' },
+  { firma: Buffer.from([0x89, 0x50, 0x4e, 0x47]), ext: 'png', mime: 'image/png' },
+];
+
+/** Puede subir comprobante mientras el pago no esté verificado y el pedido siga abierto. */
+function aceptaComprobante(p) {
+  return p.pago_estado !== 'verificado' && !['entregado', 'cancelado'].includes(p.estado_codigo);
+}
+
+async function guardarComprobante(pedido, archivo) {
+  if (!aceptaComprobante(pedido)) {
+    throw new ErrorCotizacion(
+      pedido.pago_estado === 'verificado' ? 'El pago de este pedido ya fue verificado.' : 'Este pedido ya está cerrado.'
+    );
+  }
+  const tipo = TIPOS_COMPROBANTE.find((t) => archivo.buffer.subarray(0, t.firma.length).equals(t.firma));
+  if (!tipo) throw new ErrorCotizacion('El comprobante debe ser un PDF, JPG o PNG.');
+
+  const subdir = `comprobantes/${new Date().getFullYear()}`;
+  const nombreInterno = `${subdir}/${crypto.randomUUID()}.${tipo.ext}`;
+  await fs.mkdir(path.join(config.uploadDir, subdir), { recursive: true });
+  await fs.writeFile(path.join(config.uploadDir, nombreInterno), archivo.buffer, { flag: 'wx' });
+  const nombreOriginal = path.basename(archivo.originalname || `comprobante.${tipo.ext}`).slice(0, 255);
+
+  try {
+    await transaccion(async (conn) => {
+      await conn.query(
+        `UPDATE cotizaciones_pedidos SET pago_estado = 'por_revisar', comprobante_nombre = ?, comprobante_ruta = ?,
+           comprobante_mime = ?, comprobante_bytes = ?, comprobante_subido_en = NOW(),
+           pago_revisado_por = NULL, pago_revisado_en = NULL, pago_comentario = NULL
+         WHERE id = ?`,
+        [nombreOriginal, nombreInterno, tipo.mime, archivo.buffer.length, pedido.id]
+      );
+      await conn.query(
+        'INSERT INTO historial_estados (pedido_id, estado_id, comentario) VALUES (?, ?, ?)',
+        [pedido.id, pedido.estado_id, 'El cliente subió el comprobante de pago']
+      );
+    });
+  } catch (e) {
+    await fs.unlink(path.join(config.uploadDir, nombreInterno)).catch(() => {});
+    throw e;
+  }
+  // El comprobante anterior (si lo rechazaron o se reemplazó) ya no se necesita
+  if (pedido.comprobante_ruta) await fs.unlink(rutaComprobante(pedido)).catch(() => {});
+  return obtenerPedido(pedido.id);
+}
+
+async function revisarPago(pedido, verificado, usuarioId, comentario) {
+  if (!verificado && !comentario) throw new ErrorCotizacion('Indique al cliente el motivo del rechazo.');
+  if (!verificado && pedido.pago_estado !== 'por_revisar') throw new ErrorCotizacion('No hay un comprobante por revisar.');
+  await transaccion(async (conn) => {
+    await conn.query(
+      `UPDATE cotizaciones_pedidos SET pago_estado = ?, pago_revisado_por = ?, pago_revisado_en = NOW(), pago_comentario = ?
+       WHERE id = ?`,
+      [verificado ? 'verificado' : 'rechazado', usuarioId, comentario || null, pedido.id]
+    );
+    await conn.query(
+      'INSERT INTO historial_estados (pedido_id, estado_id, usuario_id, comentario) VALUES (?, ?, ?, ?)',
+      [
+        pedido.id,
+        pedido.estado_id,
+        usuarioId,
+        verificado ? `Pago verificado${comentario ? `: ${comentario}` : ''}` : `Comprobante rechazado: ${comentario}`,
+      ]
+    );
+  });
+  return obtenerPedido(pedido.id);
 }
 
 async function actualizarPapel(id, { precio_m2, activo, descripcion }) {
@@ -188,9 +284,14 @@ module.exports = {
   buscarPorCodigoYEmail,
   listarPedidos,
   resumenEstados,
+  pagosPorRevisar,
   historial,
   cambiarEstado,
   guardarNotas,
   rutaArchivo,
+  rutaComprobante,
+  aceptaComprobante,
+  guardarComprobante,
+  revisarPago,
   actualizarPapel,
 };

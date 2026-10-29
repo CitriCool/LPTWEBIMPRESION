@@ -5,10 +5,18 @@
   const $ = (s, r = document) => r.querySelector(s);
 
   const PAGO = { cajas_uct: 'Cajas UCT', traspaso_presupuestario: 'Traspaso' };
+  const ESTADO_PAGO = {
+    sin_comprobante: 'Sin comprobante',
+    por_revisar: 'Por revisar',
+    verificado: 'Verificado',
+    rechazado: 'Rechazado',
+  };
+  const ESTADOS_CON_PAGO = ['en_impresion', 'listo', 'entregado'];
   const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios'];
   let usuario = null;
   let estados = [];
   let filtroEstado = '';
+  let filtroPago = '';
   let temporizadorBusqueda;
 
   function mostrar(id) {
@@ -60,15 +68,19 @@
   // ---------- Lista ----------
   async function cargarLista() {
     mostrar('vista-lista');
-    const [{ estados: resumen }, datos] = await Promise.all([
+    const filtros = new URLSearchParams({ limite: 100, estado: filtroEstado, pago: filtroPago, q: $('#buscar').value });
+    const [{ estados: resumen, pagos_por_revisar: porRevisar }, datos] = await Promise.all([
       llamar('/admin/api/resumen'),
-      llamar(`/admin/api/pedidos?limite=100&estado=${encodeURIComponent(filtroEstado)}&q=${encodeURIComponent($('#buscar').value)}`),
+      llamar(`/admin/api/pedidos?${filtros}`),
     ]);
 
-    $('#resumen').innerHTML = resumen
-      .map((e) => `<button type="button" data-estado="${esc(e.codigo)}" aria-pressed="${filtroEstado === e.codigo}">
+    $('#resumen').innerHTML =
+      `<button type="button" data-pago="por_revisar" aria-pressed="${filtroPago === 'por_revisar'}">
+          <span class="estado pago-por_revisar">Pagos por revisar</span><b>${porRevisar}</b><span class="tenue">comprobantes</span></button>` +
+      resumen
+        .map((e) => `<button type="button" data-estado="${esc(e.codigo)}" aria-pressed="${filtroEstado === e.codigo}">
           <span class="estado estado-${esc(e.codigo)}">${esc(e.nombre)}</span><b>${e.cantidad}</b><span class="tenue">${clp(e.monto)}</span></button>`)
-      .join('');
+        .join('');
 
     $('#filas').innerHTML = datos.pedidos.length
       ? datos.pedidos
@@ -79,7 +91,7 @@
             <td>${esc(p.papel_nombre)}</td>
             <td>${cm(p.ancho_m)} × ${cm(p.alto_m)} cm${p.paginas > 1 ? ` <small class="tenue">(${p.paginas} pág.)</small>` : ''}${p.copias > 1 ? ` ×${p.copias}` : ''}</td>
             <td class="num">${clp(p.total_clp)}</td>
-            <td>${PAGO[p.metodo_pago] || ''}</td>
+            <td>${PAGO[p.metodo_pago] || ''}<br><span class="estado pago-${esc(p.pago_estado)}">${ESTADO_PAGO[p.pago_estado]}</span></td>
             <td><span class="estado estado-${esc(p.estado_codigo)}">${esc(p.estado_nombre)}</span></td></tr>`)
           .join('')
       : '<tr><td colspan="8" class="tenue">No hay pedidos con este filtro.</td></tr>';
@@ -123,10 +135,16 @@
           </div>
         </div>
         <div class="pila">
+          ${tarjetaPago(p)}
           <form class="tarjeta pila" id="form-estado">
             <h3>Cambiar estado</h3>
             <label>Nuevo estado
-              <select name="estado_id">${estados.map((e) => `<option value="${e.id}" ${e.codigo === p.estado_codigo ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
+              <select name="estado_id">${estados
+                .map((e) => {
+                  const bloqueado = p.pago_estado !== 'verificado' && ESTADOS_CON_PAGO.includes(e.codigo) && e.codigo !== p.estado_codigo;
+                  return `<option value="${e.id}" ${e.codigo === p.estado_codigo ? 'selected' : ''} ${bloqueado ? 'disabled' : ''}>${esc(e.nombre)}${bloqueado ? ' (requiere pago verificado)' : ''}</option>`;
+                })
+                .join('')}</select>
             </label>
             <label>Comentario para el cliente <small class="tenue">(opcional)</small>
               <textarea name="comentario" rows="2" maxlength="500"></textarea>
@@ -162,6 +180,22 @@
         aviso(e.message);
       }
     });
+    $('#form-pago')?.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.currentTarget;
+      const accion = ev.submitter?.value;
+      if (accion === 'rechazar' && !f.comentario.value.trim()) {
+        aviso('Escriba el motivo del rechazo para el cliente.');
+        return f.comentario.focus();
+      }
+      try {
+        await llamar(`/admin/api/pedidos/${p.id}/pago`, { method: 'PATCH', body: { accion, comentario: f.comentario.value } });
+        aviso(accion === 'verificar' ? 'Pago verificado' : 'Comprobante rechazado; se avisó al cliente');
+        cargarDetalle(p.id);
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
     $('#form-notas').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
@@ -171,6 +205,33 @@
         aviso(e.message);
       }
     });
+  }
+
+  function tarjetaPago(p) {
+    const url = `/admin/api/pedidos/${p.id}/comprobante`;
+    const vista = !p.comprobante_nombre
+      ? '<p class="tenue">El cliente aún no sube comprobante. Si el pago ya está confirmado por otra vía (p. ej. traspaso), puede verificarlo igual.</p>'
+      : `<p><a class="boton boton-sm boton-claro" href="${url}" target="_blank" rel="noopener">Abrir comprobante</a>
+           <small class="tenue">${esc(p.comprobante_nombre)} · subido el ${esc(fechaHora(p.comprobante_subido_en))}</small></p>
+         ${p.comprobante_mime === 'application/pdf'
+           ? `<iframe class="comprobante-vista" src="${url}" title="Comprobante de pago" height="420"></iframe>`
+           : `<img class="comprobante-vista" src="${url}" alt="Comprobante de pago">`}`;
+    const revisado = p.pago_revisado_en ? `<p class="tenue">Revisado el ${esc(fechaHora(p.pago_revisado_en))}${p.pago_comentario ? ` · ${esc(p.pago_comentario)}` : ''}</p>` : '';
+    const acciones =
+      p.pago_estado === 'verificado'
+        ? ''
+        : `<form class="pila" id="form-pago">
+            <label>Comentario <small class="tenue">(obligatorio si rechaza; lo recibe el cliente)</small>
+              <textarea name="comentario" rows="2" maxlength="500" placeholder="Ej.: el monto no coincide con el total del pedido"></textarea></label>
+            <div class="acciones">
+              <button class="boton" type="submit" value="verificar">Verificar pago</button>
+              ${p.pago_estado === 'por_revisar' ? '<button class="boton boton-peligro" type="submit" value="rechazar">Rechazar comprobante</button>' : ''}
+            </div>
+          </form>`;
+    return `<div class="tarjeta pila">
+        <h3>Pago <span class="estado pago-${esc(p.pago_estado)}">${ESTADO_PAGO[p.pago_estado]}</span></h3>
+        ${vista}${revisado}${acciones}
+      </div>`;
   }
 
   // ---------- Papeles ----------
@@ -257,9 +318,10 @@
       temporizadorBusqueda = setTimeout(cargarLista, 300);
     });
     $('#resumen').addEventListener('click', (ev) => {
-      const b = ev.target.closest('button[data-estado]');
+      const b = ev.target.closest('button[data-estado], button[data-pago]');
       if (!b) return;
-      filtroEstado = filtroEstado === b.dataset.estado ? '' : b.dataset.estado;
+      if (b.dataset.pago) filtroPago = filtroPago === b.dataset.pago ? '' : b.dataset.pago;
+      else filtroEstado = filtroEstado === b.dataset.estado ? '' : b.dataset.estado;
       cargarLista();
     });
     $('#filas').addEventListener('click', (ev) => {
