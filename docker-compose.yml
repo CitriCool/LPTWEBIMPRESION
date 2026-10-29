@@ -1,0 +1,71 @@
+# Sistema de pedidos de impresión LPT - UCT
+#
+# Desarrollo / servidor interno:   docker compose up -d --build
+#   -> http://localhost:3000  (panel en /admin)
+#
+# Producción con dominio propio y HTTPS automático (Caddy + Let's Encrypt):
+#   definir DOMINIO en .env y ejecutar
+#   docker compose --profile produccion up -d --build
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: lpt-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD en .env}
+      MARIADB_DATABASE: lpt_impresion
+      MARIADB_USER: ${DB_USER:-lpt}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      TZ: America/Santiago
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  app:
+    build: ./app
+    container_name: lpt-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: lpt_impresion
+      UPLOAD_DIR: /data/uploads
+      TZ: America/Santiago
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: lpt-caddy
+    restart: unless-stopped
+    profiles: ["produccion"]
+    depends_on: [app]
+    environment:
+      DOMINIO: ${DOMINIO:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db_data:
+  uploads:
+  caddy_data:
+  caddy_config:

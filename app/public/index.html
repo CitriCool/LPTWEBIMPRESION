@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Servicio de Impresión · LPT UCT</title>
+  <meta name="description" content="Impresión y ploteo de pósters, mapas, afiches e infografías. Laboratorio de Planificación Territorial, Universidad Católica de Temuco.">
+  <link rel="stylesheet" href="/css/estilos.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23f2c200'/%3E%3Cpath d='M7 9V5h7l3 3v1M6 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-1M7 14h10v5H7z' fill='none' stroke='%231f5aa6' stroke-width='1.8'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="barra">
+    <div class="contenedor barra-int">
+      <a class="marca" href="#inicio">
+        <span class="marca-icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 9V4h7l3 3v2M6 18H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-1M7 14h10v6H7z"/></svg>
+        </span>
+        <span><b>Servicio de Impresión</b><small>LPT · Universidad Católica de Temuco</small></span>
+      </a>
+      <nav class="nav">
+        <a href="#precios">Precios</a>
+        <a href="#cotizador">Cotizar</a>
+        <a href="#solicitar" class="boton boton-sm">Enviar archivo</a>
+        <a href="#seguimiento">Mi pedido</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="inicio">
+    <section class="hero">
+      <div class="contenedor hero-int">
+        <div>
+          <p class="sobretitulo">Laboratorio de Planificación Territorial</p>
+          <h1>Impresión rápida y de alta calidad, ahora en línea</h1>
+          <p class="lead">Sube tu PDF, revisa el precio al instante y recibe avisos por correo hasta que tu impresión esté lista para retirar.</p>
+          <div class="acciones">
+            <a class="boton boton-amarillo" href="#solicitar">Solicitar impresión</a>
+            <a class="boton boton-claro" href="#cotizador">Cotizar medidas</a>
+          </div>
+        </div>
+        <ul class="hero-datos">
+          <li><b>1 a 2 días hábiles</b><span>plazo mínimo desde la recepción</span></li>
+          <li><b>Hasta 1 m de ancho</b><span>largo según tu diseño</span></li>
+          <li><b>PDF de hasta 15 MB</b><span>con las medidas finales</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="seccion contenedor rejilla-3" aria-label="Servicios">
+      <article class="tarjeta">
+        <h2 class="h3">¿Qué puedes imprimir?</h2>
+        <p>Pósters, mapas, afiches, infografías, planos y cualquier pieza gráfica de gran formato.</p>
+      </article>
+      <article class="tarjeta">
+        <h2 class="h3">Otros servicios</h2>
+        <p>Escaneo de mapas o planos en alta calidad. Consulta precio y disponibilidad escribiendo a <a class="js-correo" href="mailto:lpt@uct.cl">lpt@uct.cl</a>.</p>
+      </article>
+      <article class="tarjeta">
+        <h2 class="h3">Formas de pago</h2>
+        <p>En Cajas UCT o por traspaso presupuestario, indicando siempre el <b>SCC <span class="js-scc">251-1148</span></b> y tu código de pedido.</p>
+      </article>
+    </section>
+
+    <section id="precios" class="seccion contenedor">
+      <h2>Tipos de papel <small>precio por m²</small></h2>
+      <div id="lista-papeles" class="rejilla-3 papeles" aria-live="polite"></div>
+    </section>
+
+    <section id="cotizador" class="seccion contenedor">
+      <div class="tarjeta cotizador">
+        <div>
+          <h2>Cotizador rápido</h2>
+          <p class="tenue">Ingresa las medidas de tu impresión para conocer el costo estimado. Al enviar el PDF calcularemos el valor exacto según el archivo.</p>
+        </div>
+        <form id="form-cotizar" class="form-grid" novalidate>
+          <label>Papel
+            <select name="papel" required></select>
+          </label>
+          <label>Ancho (cm)
+            <input name="ancho_cm" type="number" inputmode="decimal" min="1" step="0.1" placeholder="ej. 60" required>
+          </label>
+          <label>Alto (cm)
+            <input name="alto_cm" type="number" inputmode="decimal" min="1" step="0.1" placeholder="ej. 90" required>
+          </label>
+          <label>Copias
+            <input name="copias" type="number" min="1" max="100" value="1" required>
+          </label>
+          <output id="resultado-cotizar" class="resultado" aria-live="polite">
+            <span class="tenue">Completa las medidas para ver el precio.</span>
+          </output>
+        </form>
+      </div>
+    </section>
+
+    <section id="solicitar" class="seccion contenedor">
+      <h2>Solicitar impresión</h2>
+      <form id="form-pedido" class="tarjeta pedido" novalidate>
+        <fieldset>
+          <legend>1. Tu archivo</legend>
+          <label class="zona-archivo" id="zona-archivo">
+            <input type="file" name="archivo" accept="application/pdf,.pdf" required>
+            <span class="zona-texto"><b>Selecciona o arrastra tu PDF</b><br><small>Máximo <span class="js-maxmb">15</span> MB. El archivo debe tener las medidas exactas que quieres en papel (ancho máximo 1 m).</small></span>
+          </label>
+          <div id="info-archivo" class="info-archivo" hidden></div>
+          <div class="form-grid">
+            <label>Papel
+              <select name="papel" required></select>
+            </label>
+            <label>Copias
+              <input name="copias" type="number" min="1" max="100" value="1" required>
+            </label>
+          </div>
+          <output id="resultado-pedido" class="resultado" aria-live="polite"><span class="tenue">Sube tu PDF para calcular el valor.</span></output>
+        </fieldset>
+
+        <fieldset>
+          <legend>2. Tus datos</legend>
+          <div class="form-grid">
+            <label class="span-2">Nombre completo
+              <input name="nombre" autocomplete="name" required maxlength="120">
+            </label>
+            <label>RUT
+              <input name="rut" placeholder="12.345.678-5" required maxlength="20">
+              <span class="check"><input type="checkbox" name="extranjero"> No tengo RUT (pasaporte u otro documento)</span>
+            </label>
+            <label>Teléfono
+              <input name="telefono" type="tel" autocomplete="tel" placeholder="+56 9 1234 5678" required maxlength="30">
+            </label>
+            <label>Correo electrónico
+              <input name="email" type="email" autocomplete="email" required maxlength="160">
+            </label>
+            <label>Carrera, unidad o institución <small class="tenue">(opcional)</small>
+              <input name="unidad" maxlength="160">
+            </label>
+            <label class="span-2">Observaciones <small class="tenue">(opcional)</small>
+              <textarea name="observaciones" rows="2" maxlength="1000" placeholder="Ej. retiro el jueves, imprimir solo páginas 1 y 3, etc."></textarea>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>3. Forma de pago</legend>
+          <div class="opciones-pago">
+            <label class="opcion"><input type="radio" name="metodo_pago" value="cajas_uct" required> <span><b>Cajas UCT</b><small>Pagas en caja indicando el SCC <span class="js-scc">251-1148</span></small></span></label>
+            <label class="opcion"><input type="radio" name="metodo_pago" value="traspaso_presupuestario"> <span><b>Traspaso presupuestario</b><small>Para unidades UCT, al SCC <span class="js-scc">251-1148</span></small></span></label>
+          </div>
+          <label class="check"><input type="checkbox" name="acepta" required> Confirmo que el PDF tiene las medidas finales de impresión.</label>
+        </fieldset>
+
+        <div id="errores-pedido" class="alerta alerta-error" role="alert" hidden></div>
+        <button class="boton boton-grande" type="submit">Enviar pedido</button>
+      </form>
+
+      <div id="confirmacion" class="tarjeta confirmacion" hidden tabindex="-1"></div>
+    </section>
+
+    <section id="seguimiento" class="seccion contenedor">
+      <div class="tarjeta cotizador">
+        <div>
+          <h2>Consultar mi pedido</h2>
+          <p class="tenue">Ingresa el código que recibiste por correo (ej. LPT-2026-00001) y tu email.</p>
+        </div>
+        <form id="form-seguimiento" class="form-grid" novalidate>
+          <label>Código<input name="codigo" required placeholder="LPT-2026-00001"></label>
+          <label>Correo<input name="email" type="email" required></label>
+          <button class="boton" type="submit">Consultar</button>
+          <output id="resultado-seguimiento" class="resultado" aria-live="polite"></output>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pie">
+    <div class="contenedor">
+      <p><b>Universidad Católica de Temuco · Laboratorio de Planificación Territorial</b></p>
+      <p>Consultas: <a href="mailto:rcallejas@uct.cl">rcallejas@uct.cl</a> · <a href="mailto:lpt@uct.cl">lpt@uct.cl</a></p>
+    </div>
+  </footer>
+
+  <script src="/vendor/pdf-lib.min.js" defer></script>
+  <script src="/js/comun.js" defer></script>
+  <script src="/js/app.js" defer></script>
+</body>
+</html>

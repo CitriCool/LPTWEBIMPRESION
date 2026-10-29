@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Panel · Servicio de Impresión LPT</title>
+  <link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+  <header class="barra">
+    <div class="contenedor barra-int">
+      <a class="marca" href="#">
+        <span class="marca-icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M7 9V4h7l3 3v2M6 18H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-1M7 14h10v6H7z"/></svg>
+        </span>
+        <span><b>Panel de pedidos</b><small>Servicio de Impresión LPT</small></span>
+      </a>
+      <nav class="nav" id="nav-admin" hidden>
+        <a href="#">Pedidos</a>
+        <a href="#papeles">Papeles y precios</a>
+        <a href="#usuarios" id="link-usuarios" hidden>Usuarios</a>
+        <span class="tenue" id="usuario-actual"></span>
+        <button class="boton boton-claro boton-sm" id="salir" type="button">Salir</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="contenedor admin-main">
+    <form id="vista-login" class="tarjeta login" hidden>
+      <h1 class="h3">Ingreso operadores LPT</h1>
+      <label>Correo<input name="email" type="email" autocomplete="username" required></label>
+      <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="error" id="error-login" role="alert"></p>
+      <button class="boton" type="submit">Ingresar</button>
+    </form>
+
+    <section id="vista-lista" hidden>
+      <div class="resumen" id="resumen"></div>
+      <div class="filtros">
+        <input type="search" id="buscar" placeholder="Buscar por código, nombre, RUT o correo">
+        <button class="boton boton-claro boton-sm" id="refrescar" type="button">Actualizar</button>
+      </div>
+      <div class="tabla-env">
+        <table>
+          <thead><tr><th>Código</th><th>Fecha</th><th>Cliente</th><th>Papel</th><th>Medidas</th><th>Total</th><th>Pago</th><th>Estado</th></tr></thead>
+          <tbody id="filas"></tbody>
+        </table>
+      </div>
+      <p class="tenue" id="pie-lista"></p>
+    </section>
+
+    <section id="vista-detalle" hidden></section>
+    <section id="vista-papeles" hidden></section>
+    <section id="vista-usuarios" hidden></section>
+  </main>
+
+  <script src="/js/comun.js" defer></script>
+  <script src="/js/admin.js" defer></script>
+</body>
+</html>
