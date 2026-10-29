@@ -158,7 +158,7 @@
       <div class="tarjeta cotizador">
         <div>
           <h2>Consultar mi pedido</h2>
-          <p class="tenue">Ingresa el código que recibiste por correo (ej. LPT-2026-00001) y tu email.</p>
+          <p class="tenue">Ingresa el código que recibiste por correo (ej. LPT-2026-00001) y tu email. Aquí también subes la boleta o el comprobante cuando hayas pagado.</p>
         </div>
         <form id="form-seguimiento" class="form-grid" novalidate>
           <label>Código<input name="codigo" required placeholder="LPT-2026-00001"></label>
@@ -166,6 +166,7 @@
           <button class="boton" type="submit">Consultar</button>
           <output id="resultado-seguimiento" class="resultado" aria-live="polite"></output>
         </form>
+        <div id="pago-seguimiento" class="pago-seguimiento" hidden></div>
       </div>
     </section>
   </main>

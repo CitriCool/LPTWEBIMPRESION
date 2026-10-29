@@ -52,6 +52,10 @@ module.exports = {
   reglas: {
     entidad: 'Universidad Católica de Temuco - Laboratorio de Planificación Territorial (LPT)',
     maxBytes: 15 * 1024 * 1024,
+    // Comprobante de pago (boleta o traspaso): PDF, JPG o PNG
+    comprobanteMaxBytes: 5 * 1024 * 1024,
+    // Estados a los que un pedido solo puede pasar con el pago verificado
+    estadosConPago: ['en_impresion', 'listo', 'entregado'],
     anchoMaxM: 1.0,
     // Tolerancia por redondeo al convertir puntos PDF a metros (1 mm)
     toleranciaM: 0.001,

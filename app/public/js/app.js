@@ -186,9 +186,16 @@
         <b>Instrucciones de pago · ${esc(r.metodo_pago_nombre)}</b>
         <p>${esc(r.instrucciones_pago)}</p>
         <p class="scc">SCC ${esc(CONFIG.reglas.scc)}</p>
+        <p>Cuando hayas pagado, sube tu boleta o comprobante en <a href="#seguimiento" id="ir-comprobante">Mi pedido</a> (también te llega el enlace por correo). Comenzamos a imprimir al verificar el pago.</p>
       </div>
       <button class="boton boton-claro" type="button" id="nuevo-pedido">Enviar otro archivo</button>`;
     c.hidden = false;
+    $('#ir-comprobante').addEventListener('click', () => {
+      const f = $('#form-seguimiento');
+      f.codigo.value = r.codigo;
+      f.email.value = r.email;
+      consultar();
+    });
     c.focus();
     c.scrollIntoView({ behavior: 'smooth', block: 'start' });
     $('#nuevo-pedido').addEventListener('click', () => {
@@ -202,20 +209,95 @@
     });
   }
 
-  // ---------- Seguimiento ----------
+  // ---------- Seguimiento y comprobante de pago ----------
+  const NOMBRE_PAGO = {
+    sin_comprobante: 'Pago pendiente',
+    por_revisar: 'Comprobante en revisión',
+    verificado: 'Pago verificado',
+    rechazado: 'Comprobante rechazado',
+  };
+
   async function consultar(ev) {
-    ev.preventDefault();
-    const f = ev.currentTarget;
+    ev?.preventDefault();
+    const f = $('#form-seguimiento');
     const out = $('#resultado-seguimiento');
+    const pago = $('#pago-seguimiento');
     if (!f.reportValidity()) return;
     out.innerHTML = '<span class="tenue">Buscando…</span>';
+    pago.hidden = true;
     try {
       const r = await api('/api/seguimiento', { method: 'POST', body: { codigo: f.codigo.value, email: f.email.value } });
-      out.innerHTML = `<span class="estado estado-${esc(r.estado_codigo)}">${esc(r.estado)}</span>
+      out.innerHTML = `<span><span class="estado estado-${esc(r.estado_codigo)}">${esc(r.estado)}</span>
+          <span class="estado pago-${esc(r.pago_estado)}">${esc(NOMBRE_PAGO[r.pago_estado])}</span></span>
         <span class="tenue">${esc(r.papel)} · ${clp(r.total_clp)} · entrega estimada ${esc(fecha(r.fecha_entrega_estimada))}</span>`;
+      mostrarPago(r);
     } catch (err) {
       out.innerHTML = `<span class="error">${esc(err.message)}</span>`;
     }
+  }
+
+  function mostrarPago(r) {
+    const pago = $('#pago-seguimiento');
+    if (!r.acepta_comprobante) return;
+    const textos = {
+      sin_comprobante: '<p>Cuando hayas pagado, sube aquí tu boleta o el comprobante de traspaso. Comenzamos a imprimir cuando verificamos el pago.</p>',
+      por_revisar: `<p>Recibimos tu comprobante <b>${esc(r.comprobante_nombre)}</b> y lo estamos revisando. Si te equivocaste de archivo, puedes reemplazarlo.</p>`,
+      rechazado: `<p class="error"><b>No pudimos validar tu comprobante:</b> ${esc(r.pago_comentario)}</p><p>Sube uno nuevo para continuar.</p>`,
+    };
+    pago.innerHTML = `
+      <div class="alerta alerta-pago">
+        <b>${esc(r.metodo_pago_nombre)} · ${clp(r.total_clp)}</b>
+        <p>${esc(r.instrucciones_pago)}</p>
+        ${textos[r.pago_estado] || ''}
+        <form id="form-comprobante" novalidate>
+          <label>Boleta o comprobante <small class="tenue">(PDF, JPG o PNG, máx. ${CONFIG.reglas.comprobanteMaxMb} MB)</small>
+            <input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png" required></label>
+          <button class="boton" type="submit">${r.pago_estado === 'por_revisar' ? 'Reemplazar comprobante' : 'Subir comprobante'}</button>
+        </form>
+        <p id="msg-comprobante" role="status"></p>
+      </div>`;
+    pago.hidden = false;
+    $('#form-comprobante').addEventListener('submit', subirComprobante);
+  }
+
+  async function subirComprobante(ev) {
+    ev.preventDefault();
+    const f = ev.currentTarget;
+    const msg = $('#msg-comprobante');
+    const archivo = f.archivo.files[0];
+    if (!archivo) return f.reportValidity();
+    if (archivo.size > CONFIG.reglas.comprobanteMaxMb * 1024 * 1024) {
+      msg.innerHTML = `<span class="error">El archivo supera los ${CONFIG.reglas.comprobanteMaxMb} MB.</span>`;
+      return;
+    }
+    const s = $('#form-seguimiento');
+    // codigo y email van antes del archivo para que el servidor los lea primero
+    const datos = new FormData();
+    datos.append('codigo', s.codigo.value);
+    datos.append('email', s.email.value);
+    datos.append('archivo', archivo);
+    const boton = f.querySelector('button');
+    boton.disabled = true;
+    boton.textContent = 'Subiendo…';
+    try {
+      await api('/api/pedidos/comprobante', { method: 'POST', body: datos });
+      await consultar();
+      $('#resultado-seguimiento').insertAdjacentHTML('beforeend', '<span><b>¡Listo!</b> Recibimos tu comprobante; te avisaremos por correo cuando lo verifiquemos.</span>');
+    } catch (err) {
+      msg.innerHTML = `<span class="error">${esc(err.message)}</span>`;
+      boton.disabled = false;
+      boton.textContent = 'Subir comprobante';
+    }
+  }
+
+  /** El enlace del correo trae ?codigo=…&email=…: se completa y consulta solo. */
+  function seguimientoDesdeEnlace() {
+    const q = new URLSearchParams(location.search);
+    if (!q.get('codigo') || !q.get('email')) return;
+    const f = $('#form-seguimiento');
+    f.codigo.value = q.get('codigo');
+    f.email.value = q.get('email');
+    consultar();
   }
 
   // ---------- Inicio ----------
@@ -247,5 +329,6 @@
     });
 
     $('#form-seguimiento').addEventListener('submit', consultar);
+    seguimientoDesdeEnlace();
   });
 })();
