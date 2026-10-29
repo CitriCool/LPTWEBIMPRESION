@@ -43,6 +43,9 @@ module.exports = {
     pass: env.SMTP_PASS || '',
     from: env.MAIL_FROM || 'Servicio de Impresión LPT <lpt@uct.cl>',
     lpt: lista(env.MAIL_LPT, 'rcallejas@uct.cl,lpt@uct.cl'),
+    // Adjuntar el PDF del cliente en el aviso de pedido nuevo al equipo LPT
+    adjuntarPdf: env.MAIL_ADJUNTAR_PDF !== 'false',
+    adjuntarMaxBytes: Number(env.MAIL_ADJUNTAR_MAX_MB || 10) * 1024 * 1024,
   },
 
   // Reglas de negocio publicadas en el afiche del servicio
