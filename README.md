@@ -58,7 +58,21 @@ Qué correos se envían:
   el total, el enlace al panel y el PDF adjunto (`MAIL_ADJUNTAR_PDF`, hasta `MAIL_ADJUNTAR_MAX_MB`).
   Responder ese correo le escribe directo al cliente.
 - **Confirmación al cliente:** código de pedido, total e instrucciones de pago.
+- **Comprobante recibido:** aviso a `MAIL_LPT` con la boleta adjunta, para revisarla en el panel.
+- **Pago verificado o rechazado:** al cliente (con copia oculta a `MAIL_LPT`); si se rechaza, lleva el motivo y el enlace para subir otro.
 - **Cambio de estado:** al cliente (si se marca en el panel) y a `MAIL_LPT`.
+
+### Comprobante de pago
+
+1. El cliente hace el pedido y recibe el total con las instrucciones de pago.
+2. Después de pagar, sube la boleta o el comprobante de traspaso (PDF, JPG o PNG, máx. 5 MB) en
+   "Mi pedido" o desde el botón del correo de confirmación, que trae el código y el correo ya completados.
+3. En el panel, el filtro "Pagos por revisar" muestra los comprobantes nuevos. El operador lo abre
+   y lo verifica, o lo rechaza con un motivo que recibe el cliente.
+4. Un pedido solo puede pasar a "En impresión", "Listo" o "Entregado" con el pago verificado. Si el
+   pago se confirmó por otra vía (p. ej. un traspaso), se puede verificar sin comprobante.
+
+Las bases creadas con una versión anterior se actualizan solas al arrancar la app (`src/lib/migraciones.js`).
 
 ## Cómo funciona
 
