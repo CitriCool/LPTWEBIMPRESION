@@ -172,3 +172,45 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .resumen { grid-template-columns: repeat(2, 1fr); }
   .detalle-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Equipos en préstamo ---------- */
+.unidad-disponible { background: #dcf5e8; color: var(--ok); }
+.unidad-prestado { background: #e3ecff; color: #1d3f9c; }
+.unidad-mantencion { background: #fff4d6; color: #8a5a00; }
+.unidad-baja { background: #eceff3; color: #3d4654; }
+.inventario-alta { margin-top: 1.5rem; }
+.fila-categoria { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.fila-categoria input[name="nombre"] { flex: 1; min-width: 160px; }
+.qr-vista { width: 220px; max-width: 100%; }
+.qr-vista svg, .etiqueta-qr svg { display: block; width: 100%; height: auto; }
+.qr-publico { max-width: 520px; padding: 2rem 0; }
+.etiquetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5cm, 1fr)); gap: .4cm; margin-top: 1rem; }
+.etiqueta { display: flex; align-items: center; gap: .3cm; border: 1px dashed var(--borde); border-radius: 6px; padding: .25cm; background: var(--blanco); break-inside: avoid; }
+.etiqueta-qr { width: 2.8cm; flex: none; }
+.etiqueta-texto { display: grid; gap: .1cm; line-height: 1.15; min-width: 0; }
+.etiqueta-texto small { font-size: 8pt; letter-spacing: .06em; color: var(--tenue); }
+.etiqueta-texto b { font-size: 13pt; word-break: break-all; }
+.etiqueta-texto span { font-size: 9pt; }
+@media print {
+  .barra, .no-imprimir, .aviso { display: none !important; }
+  body { background: #fff; }
+  .admin-main { padding: 0; }
+  .contenedor { width: auto; }
+  .etiquetas { grid-template-columns: repeat(3, 1fr); margin: 0; }
+  .etiqueta { border-color: #999; }
+}
+.prestamo-solicitado { background: #fff4d6; color: #8a5a00; }
+.prestamo-aprobado { background: #dcf5e8; color: var(--ok); }
+.prestamo-entregado { background: #e3ecff; color: #1d3f9c; }
+.prestamo-devuelto { background: #eceff3; color: #3d4654; }
+.prestamo-rechazado, .prestamo-cancelado { background: #fdecea; color: var(--error); }
+.categoria { margin: 1.5rem 0 .8rem; color: var(--azul-osc); }
+.equipo { display: grid; gap: .5rem; align-content: start; }
+.equipo h4 { margin: 0; font-size: 1.1rem; }
+.equipo p { margin: 0; }
+.equipo .detalle { margin: .3rem 0; font-size: .92rem; }
+.equipo .boton { justify-self: start; }
+.info-equipo { margin-top: .8rem; font-size: .92rem; }
+.condiciones { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: .4rem; }
+.resumen-6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 860px) { .resumen-6 { grid-template-columns: repeat(2, 1fr); } }

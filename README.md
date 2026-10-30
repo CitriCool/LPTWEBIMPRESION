@@ -73,6 +73,36 @@ Qué correos se envían:
 
 Las bases creadas con una versión anterior se actualizan solas al arrancar la app (`src/lib/migraciones.js`).
 
+### Equipos en préstamo (inventario y etiquetas QR)
+
+En el panel, la pestaña *Equipos* registra lo que se presta (notebooks, drones, etc.):
+
+- **Equipo:** categoría, nombre, accesorios, garantía que se deja, tarifa por día (0 = sin costo) y plazo máximo.
+- **Unidad:** cada aparato físico, con su n° de inventario, n° de serie, ubicación y estado
+  (disponible, prestado, en mantención, de baja).
+- **Etiquetas QR:** se imprimen por equipo o por unidad. El QR apunta a `PUBLIC_URL/q/<código>`: un
+  operador con sesión iniciada llega directo a la ficha de la unidad; cualquier otra persona solo ve
+  qué equipo es y a quién devolverlo. Si una etiqueta se pierde, "generar QR nuevo" anula la anterior.
+  Defina `PUBLIC_URL` con el dominio real antes de imprimir etiquetas.
+
+Cualquier operador consulta el inventario; solo un administrador lo modifica.
+
+### Solicitudes de préstamo
+
+1. En `/prestamos` (enlazado desde el sitio) se ve el catálogo y se pide un equipo con fechas de retiro
+   y devolución. Solo pueden pedir correos de los dominios de `PRESTAMO_DOMINIOS` (por defecto
+   `@uct.cl` y `@alu.uct.cl`), dentro del plazo máximo del equipo y con hasta 60 días de anticipación.
+   Se muestra cuántas unidades quedan libres en esas fechas y el costo (tarifa × días).
+2. Llega un correo de confirmación al solicitante y un aviso al equipo interno.
+3. En el panel, *Préstamos* lista las solicitudes. Al aceptar, se elige una unidad libre en esas
+   fechas y el día, la hora y el lugar de retiro; el solicitante recibe todo por correo. También se
+   puede rechazar, o anular un préstamo ya aceptado, con un motivo.
+4. En "Mi préstamo" (código + correo, o el enlace del correo) el solicitante ve el estado y puede
+   cancelar mientras no haya retirado el equipo.
+
+Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado. La entrega y la
+devolución escaneando el QR vienen en la próxima fase.
+
 ## Cómo funciona
 
 | Paso | Qué ocurre |
@@ -98,7 +128,8 @@ Las bases creadas con una versión anterior se actualizan solas al arrancar la a
 ```
 docker-compose.yml       MariaDB + app (+ Caddy en perfil "produccion")
 .env.example             variables de configuración
-db/schema.sql            usuarios, servicios_papel, estados_pedido, cotizaciones_pedidos, historial_estados
+db/schema.sql            usuarios, servicios_papel, estados_pedido, cotizaciones_pedidos, historial_estados,
+                         equipos_categorias, equipos, equipos_unidades, prestamos, prestamos_movimientos
 caddy/Caddyfile          proxy HTTPS para el dominio
 app/
   Dockerfile
@@ -109,8 +140,14 @@ app/
   src/lib/pedidos.js     acceso a datos de pedidos, papeles y estados
   src/lib/mailer.js      plantillas y envío de correos
   src/lib/validacion.js  datos del cliente y RUT chileno
+  src/lib/equipos.js     inventario de equipos en préstamo y QR de cada unidad
+  src/lib/prestamos.js   solicitudes, disponibilidad por fechas y aprobación
   src/routes/publico.js  /api/config, /api/cotizar, /api/pedidos, /api/seguimiento
   src/routes/admin.js    /admin/api/* (login, pedidos, estados, archivo, papeles, usuarios)
+  src/routes/equipos.js  /admin/api/equipos y /admin/api/unidades (inventario y etiquetas)
+  src/routes/qr.js       /q/<código>, destino del QR pegado en cada equipo
+  src/routes/prestamos-publico.js  /api/prestamos (catálogo, disponibilidad, solicitud, Mi préstamo)
+  src/routes/prestamos-admin.js    /admin/api/prestamos (lista, aceptar, rechazar)
   public/                sitio público y panel (HTML + CSS + JS sin framework)
   test/                  pruebas del cálculo, lectura de PDF y RUT (npm test)
 ```

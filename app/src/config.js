@@ -69,4 +69,12 @@ module.exports = {
       traspaso_presupuestario: 'Traspaso presupuestario',
     },
   },
+
+  // Préstamo de equipos: piden estudiantes y académicos con correo institucional
+  prestamos: {
+    dominios: lista(env.PRESTAMO_DOMINIOS, 'uct.cl,alu.uct.cl').map((d) => d.toLowerCase()),
+    lugarRetiro: env.PRESTAMO_LUGAR_RETIRO || 'Laboratorio de Planificación Territorial (LPT)',
+    // Con cuánta anticipación se puede pedir
+    anticipacionMaxDias: 60,
+  },
 };

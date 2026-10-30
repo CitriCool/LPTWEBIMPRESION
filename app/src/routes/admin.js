@@ -57,6 +57,9 @@ router.use(requiereSesion);
 
 router.get('/me', (req, res) => res.json(req.session.usuario));
 
+router.use(require('./equipos'));
+router.use(require('./prestamos-admin'));
+
 router.get('/resumen', async (req, res, next) => {
   try {
     const [estados, pagosPorRevisar] = await Promise.all([pedidos.resumenEstados(), pedidos.pagosPorRevisar()]);
