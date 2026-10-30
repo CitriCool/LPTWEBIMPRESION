@@ -203,4 +203,119 @@ async function cambioEstado(p, estado, comentario, notificarCliente) {
   });
 }
 
-module.exports = { pedidoRecibido, comprobanteRecibido, pagoRevisado, cambioEstado, instruccionesPago, verificar, enviar, plantilla };
+
+// ---------- Préstamo de equipos ----------
+const fechaHora = new Intl.DateTimeFormat('es-CL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+function enlacePrestamo(p) {
+  const q = new URLSearchParams({ codigo: p.codigo, email: p.solicitante_email });
+  return `${config.publicUrl}/prestamos?${q}#mi-prestamo`;
+}
+
+function tablaPrestamo(p) {
+  const filas = [
+    ['Código', p.codigo],
+    ['Equipo', `${p.equipo_nombre}${p.marca_modelo ? ` (${p.marca_modelo})` : ''}`],
+    ...(p.unidad_inventario ? [['N° de inventario', p.unidad_inventario]] : []),
+    ['Desde', f.fecha(p.fecha_desde)],
+    ['Devolución', f.fecha(p.fecha_hasta)],
+    ['Costo', p.total_clp ? `${f.clp(p.total_clp)} (${f.clp(p.tarifa_dia_clp)} por día)` : 'Sin costo'],
+    ...(p.garantia ? [['Garantía a dejar', p.garantia]] : []),
+    ...(p.accesorios ? [['Incluye', p.accesorios]] : []),
+  ];
+  return `<table cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:14px;margin:12px 0">${filas
+    .map(([k, v]) => `<tr><td style="color:#5b6576;border-bottom:1px solid #e6eaf0;width:40%">${k}</td><td style="border-bottom:1px solid #e6eaf0"><b>${f.escapar(v)}</b></td></tr>`)
+    .join('')}</table>`;
+}
+
+function botonPrestamo(p) {
+  return `<p style="margin:20px 0"><a href="${f.escapar(enlacePrestamo(p))}" style="background:#1f5aa6;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:bold">Ver mi préstamo</a></p>`;
+}
+
+/** Confirmación al solicitante y aviso al LPT de una solicitud nueva. */
+async function prestamoRecibido(p) {
+  await enviar({
+    to: p.solicitante_email,
+    subject: `Solicitud ${p.codigo} recibida - Préstamo de equipos LPT`,
+    html: plantilla('Recibimos tu solicitud de préstamo', `
+      <p>Hola ${f.escapar(p.solicitante_nombre)}, recibimos tu solicitud. El equipo del LPT la revisará y te avisaremos por correo
+      si fue aceptada, con el día, la hora y el lugar de retiro.</p>
+      ${tablaPrestamo(p)}${botonPrestamo(p)}`),
+    text: `Solicitud ${p.codigo} recibida: ${p.equipo_nombre}, ${p.fecha_desde} a ${p.fecha_hasta}. Te avisaremos cuando la revisemos. ${enlacePrestamo(p)}`,
+  });
+  const panel = `${config.publicUrl}/admin/#prestamo/${p.id}`;
+  await enviar({
+    to: config.mail.lpt.join(','),
+    replyTo: p.solicitante_email,
+    subject: `[Préstamo] ${p.codigo} · ${p.equipo_nombre} · ${p.fecha_desde}`,
+    html: plantilla(`Solicitud de préstamo ${p.codigo}`, `
+      <p><b>${f.escapar(p.solicitante_nombre)}</b> (${f.escapar(p.solicitante_rut)}) · ${f.escapar(p.solicitante_unidad)}<br>
+      ${f.escapar(p.solicitante_email)} · ${f.escapar(p.solicitante_telefono)}</p>
+      ${tablaPrestamo(p)}
+      <p><b>Motivo:</b> ${f.escapar(p.motivo)}</p>
+      <p><a href="${panel}">Aceptar o rechazar en el panel</a></p>`),
+    text: `Solicitud de préstamo ${p.codigo} de ${p.solicitante_nombre}: ${p.equipo_nombre}. Panel: ${panel}`,
+  });
+}
+
+/** Aviso al solicitante: solicitud aceptada, con el retiro. */
+async function prestamoAprobado(p) {
+  const retiro = fechaHora.format(new Date(p.retiro_en));
+  await enviar({
+    to: p.solicitante_email,
+    bcc: config.mail.lpt.join(','),
+    subject: `Préstamo ${p.codigo} aceptado: retiro el ${retiro}`,
+    html: plantilla('Tu préstamo fue aceptado', `
+      <p>Hola ${f.escapar(p.solicitante_nombre)}, aceptamos tu solicitud.</p>
+      <p style="background:#e8f6ee;border-left:4px solid #1e8e57;padding:12px"><b>Retiro:</b> ${f.escapar(retiro)}<br>
+      <b>Lugar:</b> ${f.escapar(p.retiro_lugar)}${p.garantia ? `<br><b>Lleva:</b> ${f.escapar(p.garantia)} (queda como garantía)` : ''}</p>
+      ${p.comentario_lpt ? `<p><b>Comentario del LPT:</b> ${f.escapar(p.comentario_lpt)}</p>` : ''}
+      ${tablaPrestamo(p)}
+      <p>Recuerda devolverlo el <b>${f.escapar(f.fecha(p.fecha_hasta))}</b> en las mismas condiciones. Si ya no lo necesitas, cancélalo para que otra persona pueda usarlo.</p>
+      ${botonPrestamo(p)}`),
+    text: `Préstamo ${p.codigo} aceptado. Retiro: ${retiro} en ${p.retiro_lugar}.${p.garantia ? ` Lleva ${p.garantia}.` : ''} Devolución: ${p.fecha_hasta}.`,
+  });
+}
+
+/** Aviso al solicitante: rechazo de la solicitud o anulación de un préstamo aceptado. */
+async function prestamoRechazado(p) {
+  const anulado = p.estado === 'cancelado';
+  await enviar({
+    to: p.solicitante_email,
+    bcc: config.mail.lpt.join(','),
+    subject: `Préstamo ${p.codigo}: ${anulado ? 'anulado' : 'no pudimos aceptarlo'}`,
+    html: plantilla(anulado ? 'Tu préstamo fue anulado' : 'No pudimos aceptar tu solicitud', `
+      <p>Hola ${f.escapar(p.solicitante_nombre)},</p>
+      <p style="background:#fdecea;border-left:4px solid #c62828;padding:12px"><b>Motivo:</b> ${f.escapar(p.comentario_lpt)}</p>
+      ${tablaPrestamo(p)}
+      <p>Si tienes dudas, responde a este correo.</p>`),
+    text: `Préstamo ${p.codigo} ${anulado ? 'anulado' : 'rechazado'}: ${p.comentario_lpt}`,
+  });
+}
+
+/** Aviso al LPT: el solicitante canceló. */
+async function prestamoCancelado(p) {
+  await enviar({
+    to: config.mail.lpt.join(','),
+    replyTo: p.solicitante_email,
+    subject: `[Préstamo] ${p.codigo} cancelado por el solicitante`,
+    html: plantilla(`Préstamo ${p.codigo} cancelado`, `
+      <p><b>${f.escapar(p.solicitante_nombre)}</b> canceló su préstamo; la unidad queda libre en esas fechas.</p>${tablaPrestamo(p)}`),
+    text: `${p.solicitante_nombre} canceló el préstamo ${p.codigo}.`,
+  });
+}
+
+module.exports = {
+  pedidoRecibido,
+  comprobanteRecibido,
+  pagoRevisado,
+  cambioEstado,
+  prestamoRecibido,
+  prestamoAprobado,
+  prestamoRechazado,
+  prestamoCancelado,
+  instruccionesPago,
+  verificar,
+  enviar,
+  plantilla,
+};

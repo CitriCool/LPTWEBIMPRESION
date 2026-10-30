@@ -47,6 +47,7 @@ app.get('/salud', async (req, res) => {
   }
 });
 
+app.use('/api/prestamos', require('./routes/prestamos-publico'));
 app.use('/api', require('./routes/publico'));
 app.use('/admin/api', require('./routes/admin'));
 // Destino de las etiquetas QR pegadas en los equipos de préstamo

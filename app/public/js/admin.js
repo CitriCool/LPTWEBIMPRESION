@@ -12,7 +12,7 @@
     rechazado: 'Rechazado',
   };
   const ESTADOS_CON_PAGO = ['en_impresion', 'listo', 'entregado'];
-  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos'];
+  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos', 'vista-prestamos'];
   let usuario = null;
   let estados = [];
   let filtroEstado = '';
@@ -534,6 +534,154 @@
     location.replace(`#unidad/${u.id}`);
   }
 
+  // ---------- Solicitudes de préstamo ----------
+  const ESTADO_PRESTAMO = { solicitado: 'Solicitado', aprobado: 'Aceptado', rechazado: 'Rechazado', cancelado: 'Cancelado', entregado: 'Entregado', devuelto: 'Devuelto' };
+  const TIPO_SOLICITANTE = { estudiante: 'Estudiante', academico: 'Académico/a' };
+  let filtroPrestamo = 'solicitado';
+
+  const rangoFechas = (p) => (p.fecha_desde === p.fecha_hasta ? fecha(p.fecha_desde) : `${fecha(p.fecha_desde)} al ${fecha(p.fecha_hasta)}`);
+
+  async function cargarPrestamos() {
+    mostrar('vista-prestamos');
+    const v = $('#vista-prestamos');
+    const q = $('#buscar-prestamo')?.value || '';
+    const [resumen, lista] = await Promise.all([
+      llamar('/admin/api/prestamos/resumen'),
+      llamar(`/admin/api/prestamos?${new URLSearchParams({ estado: filtroPrestamo, q })}`),
+    ]);
+    v.innerHTML = `<h1>Préstamos de equipos</h1>
+      <div class="resumen resumen-6">${resumen
+        .map((e) => `<button type="button" data-estado="${esc(e.codigo)}" aria-pressed="${filtroPrestamo === e.codigo}">
+          <span class="estado prestamo-${esc(e.codigo)}">${esc(e.nombre)}</span><b>${e.cantidad}</b></button>`)
+        .join('')}</div>
+      <div class="filtros">
+        <input type="search" id="buscar-prestamo" placeholder="Buscar por código, nombre, RUT, correo o n° de inventario" value="${esc(q)}">
+      </div>
+      <div class="tabla-env"><table>
+        <thead><tr><th>Código</th><th>Solicitante</th><th>Equipo</th><th>Fechas</th><th>Retiro</th><th>Estado</th></tr></thead>
+        <tbody id="filas-prestamos">${lista.length
+          ? lista
+              .map((p) => `<tr data-prestamo="${p.id}">
+                <td><b>${esc(p.codigo)}</b><br><small class="tenue">${esc(fechaHora(p.creado_en))}</small></td>
+                <td>${esc(p.solicitante_nombre)}<br><small class="tenue">${esc(TIPO_SOLICITANTE[p.solicitante_tipo])} · ${esc(p.solicitante_unidad)}</small></td>
+                <td>${esc(p.equipo_nombre)}${p.unidad_inventario ? `<br><small class="tenue">n° ${esc(p.unidad_inventario)}</small>` : ''}</td>
+                <td>${esc(rangoFechas(p))}</td>
+                <td>${p.retiro_en ? esc(fechaHora(p.retiro_en)) : ''}</td>
+                <td><span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span></td></tr>`)
+              .join('')
+          : '<tr><td colspan="6" class="tenue">No hay préstamos con este filtro.</td></tr>'}</tbody>
+      </table></div>`;
+
+    v.querySelector('.resumen').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button[data-estado]');
+      if (!b) return;
+      filtroPrestamo = filtroPrestamo === b.dataset.estado ? '' : b.dataset.estado;
+      cargarPrestamos();
+    });
+    const buscar = $('#buscar-prestamo');
+    buscar.addEventListener('input', () => {
+      clearTimeout(temporizadorBusqueda);
+      temporizadorBusqueda = setTimeout(() => cargarPrestamos().then(() => {
+        const b = $('#buscar-prestamo');
+        b.focus();
+        b.setSelectionRange(b.value.length, b.value.length);
+      }), 300);
+    });
+    $('#filas-prestamos').addEventListener('click', (ev) => {
+      const tr = ev.target.closest('tr[data-prestamo]');
+      if (tr) location.hash = `prestamo/${tr.dataset.prestamo}`;
+    });
+  }
+
+  async function cargarPrestamo(id) {
+    mostrar('vista-prestamos');
+    const v = $('#vista-prestamos');
+    v.innerHTML = '<p class="tenue">Cargando…</p>';
+    const p = await llamar(`/admin/api/prestamos/${id}`);
+    // Propuesta de retiro: el día pedido a las 10:00
+    const retiroSugerido = `${p.fecha_desde}T10:00`;
+    const acciones =
+      p.estado === 'solicitado'
+        ? `<form class="tarjeta pila" id="form-aprobar">
+            <h3>Aceptar solicitud</h3>
+            ${p.unidades_libres.length
+              ? `<label>Unidad a entregar<select name="unidad_id" required>${p.unidades_libres
+                  .map((u) => `<option value="${u.id}">${esc(u.inventario)}${u.ubicacion ? ` · ${esc(u.ubicacion)}` : ''}</option>`)
+                  .join('')}</select></label>`
+              : '<p class="error">No hay unidades libres en esas fechas: rechace la solicitud o libere una unidad.</p>'}
+            <div class="form-grid">
+              <label>Retiro (día y hora)<input name="retiro_en" type="datetime-local" required value="${esc(retiroSugerido)}" max="${esc(p.fecha_desde)}T23:59"></label>
+              <label>Lugar<input name="retiro_lugar" maxlength="160" value="${esc(p.lugar_retiro)}"></label>
+            </div>
+            <label>Comentario para el solicitante <small class="tenue">(opcional)</small><textarea name="comentario" rows="2" maxlength="500"></textarea></label>
+            <button class="boton" type="submit" ${p.unidades_libres.length ? '' : 'disabled'}>Aceptar y avisar por correo</button>
+          </form>`
+        : '';
+    const rechazo = ['solicitado', 'aprobado'].includes(p.estado)
+      ? `<form class="tarjeta pila" id="form-rechazar">
+          <h3>${p.estado === 'solicitado' ? 'Rechazar solicitud' : 'Anular préstamo aceptado'}</h3>
+          <label>Motivo <small class="tenue">(lo recibe el solicitante)</small><textarea name="comentario" rows="2" maxlength="500" required></textarea></label>
+          <button class="boton boton-peligro" type="submit">${p.estado === 'solicitado' ? 'Rechazar' : 'Anular'} y avisar por correo</button>
+        </form>`
+      : '';
+    v.innerHTML = `<a href="#prestamos" class="volver">← Volver a préstamos</a>
+      <h1>${esc(p.codigo)} <span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span></h1>
+      <p class="tenue">Solicitado el ${esc(fechaHora(p.creado_en))}</p>
+      <div class="detalle-grid">
+        <div class="pila">
+          <div class="tarjeta">
+            <h3>Préstamo</h3>
+            <dl class="detalle">
+              <dt>Equipo</dt><dd><a href="#equipo/${p.equipo_id}">${esc(p.equipo_nombre)}</a>${p.marca_modelo ? ` · ${esc(p.marca_modelo)}` : ''}</dd>
+              ${p.unidad_inventario ? `<dt>Unidad</dt><dd><a href="#unidad/${p.unidad_id}">${esc(p.unidad_inventario)}</a></dd>` : ''}
+              <dt>Fechas</dt><dd>${esc(rangoFechas(p))} (${p.dias} día${p.dias > 1 ? 's' : ''})</dd>
+              <dt>Costo</dt><dd>${p.total_clp ? `${clp(p.total_clp)} (${clp(p.tarifa_dia_clp)}/día)` : 'Sin costo'}</dd>
+              ${p.garantia ? `<dt>Garantía</dt><dd>${esc(p.garantia)}</dd>` : ''}
+              ${p.retiro_en ? `<dt>Retiro</dt><dd>${esc(fechaHora(p.retiro_en))} · ${esc(p.retiro_lugar)}</dd>` : ''}
+              ${p.comentario_lpt ? `<dt>Comentario LPT</dt><dd>${esc(p.comentario_lpt)}</dd>` : ''}
+              <dt>Motivo</dt><dd>${esc(p.motivo)}</dd>
+            </dl>
+          </div>
+          <div class="tarjeta">
+            <h3>Solicitante</h3>
+            <dl class="detalle">
+              <dt>Nombre</dt><dd>${esc(p.solicitante_nombre)}</dd>
+              <dt>RUT</dt><dd>${esc(p.solicitante_rut)}</dd>
+              <dt>Tipo</dt><dd>${esc(TIPO_SOLICITANTE[p.solicitante_tipo])} · ${esc(p.solicitante_unidad)}</dd>
+              <dt>Correo</dt><dd><a href="mailto:${esc(p.solicitante_email)}?subject=${encodeURIComponent('Préstamo ' + p.codigo)}">${esc(p.solicitante_email)}</a></dd>
+              <dt>Teléfono</dt><dd>${esc(p.solicitante_telefono)}</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="pila">
+          ${acciones}${rechazo}
+          <div class="tarjeta">
+            <h3>Historial</h3>
+            <ul class="historial">${p.movimientos
+              .map((m) => `<li><b>${esc(ESTADO_PRESTAMO[m.tipo] || m.tipo)}</b> · ${esc(fechaHora(m.creado_en))}${m.usuario ? ` · ${esc(m.usuario)}` : ''}${m.comentario ? `<br><span class="tenue">${esc(m.comentario)}</span>` : ''}</li>`)
+              .join('')}</ul>
+          </div>
+        </div>
+      </div>`;
+
+    const fa = $('#form-aprobar');
+    if (fa) {
+      enviar(fa, async (d) => {
+        await llamar(`/admin/api/prestamos/${p.id}/aprobar`, { method: 'POST', body: d });
+        aviso('Solicitud aceptada; se avisó al solicitante');
+        cargarPrestamo(p.id);
+      });
+    }
+    const fr = $('#form-rechazar');
+    if (fr) {
+      enviar(fr, async (d) => {
+        await llamar(`/admin/api/prestamos/${p.id}/rechazar`, { method: 'POST', body: d });
+        aviso(p.estado === 'solicitado' ? 'Solicitud rechazada; se avisó al solicitante' : 'Préstamo anulado; se avisó al solicitante');
+        cargarPrestamo(p.id);
+      });
+    }
+  }
+
   // ---------- Rutas ----------
   function enrutar() {
     if (!usuario) return mostrar('vista-login');
@@ -543,6 +691,8 @@
     if ((m = /^pedido\/(\d+)$/.exec(h))) accion = cargarDetalle(m[1]);
     else if (h === 'papeles') accion = cargarPapeles();
     else if (h === 'usuarios') accion = cargarUsuarios();
+    else if (h === 'prestamos') accion = cargarPrestamos();
+    else if ((m = /^prestamo\/(\d+)$/.exec(h))) accion = cargarPrestamo(m[1]);
     else if (h === 'equipos') accion = cargarEquipos();
     else if ((m = /^equipo\/(\d+)$/.exec(h))) accion = cargarEquipo(m[1]);
     else if ((m = /^unidad\/(\d+)$/.exec(h))) accion = cargarUnidad(m[1]);

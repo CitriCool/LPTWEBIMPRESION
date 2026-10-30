@@ -199,3 +199,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .etiquetas { grid-template-columns: repeat(3, 1fr); margin: 0; }
   .etiqueta { border-color: #999; }
 }
+.prestamo-solicitado { background: #fff4d6; color: #8a5a00; }
+.prestamo-aprobado { background: #dcf5e8; color: var(--ok); }
+.prestamo-entregado { background: #e3ecff; color: #1d3f9c; }
+.prestamo-devuelto { background: #eceff3; color: #3d4654; }
+.prestamo-rechazado, .prestamo-cancelado { background: #fdecea; color: var(--error); }
+.categoria { margin: 1.5rem 0 .8rem; color: var(--azul-osc); }
+.equipo { display: grid; gap: .5rem; align-content: start; }
+.equipo h4 { margin: 0; font-size: 1.1rem; }
+.equipo p { margin: 0; }
+.equipo .detalle { margin: .3rem 0; font-size: .92rem; }
+.equipo .boton { justify-self: start; }
+.info-equipo { margin-top: .8rem; font-size: .92rem; }
+.condiciones { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: .4rem; }
+.resumen-6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 860px) { .resumen-6 { grid-template-columns: repeat(2, 1fr); } }

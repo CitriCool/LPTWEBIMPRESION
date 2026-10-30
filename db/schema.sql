@@ -177,6 +177,59 @@ CREATE TABLE IF NOT EXISTS equipos_unidades (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
+-- Solicitudes de préstamo y su bitácora
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS prestamos (
+  id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  codigo              VARCHAR(20)  NOT NULL,                 -- ej. PRE-2026-00007
+  equipo_id           INT UNSIGNED NOT NULL,
+  unidad_id           INT UNSIGNED NULL,                     -- se asigna al aceptar la solicitud
+  -- Solicitante (estudiante o académico UCT)
+  solicitante_nombre  VARCHAR(120) NOT NULL,
+  solicitante_rut     VARCHAR(20)  NOT NULL,
+  solicitante_email   VARCHAR(160) NOT NULL,
+  solicitante_telefono VARCHAR(30) NOT NULL,
+  solicitante_tipo    ENUM('estudiante', 'academico') NOT NULL,
+  solicitante_unidad  VARCHAR(160) NOT NULL,                 -- carrera o unidad académica
+  motivo              VARCHAR(1000) NOT NULL,
+  -- Préstamo
+  fecha_desde         DATE NOT NULL,
+  fecha_hasta         DATE NOT NULL,
+  dias                SMALLINT UNSIGNED NOT NULL,
+  tarifa_dia_clp      INT UNSIGNED NOT NULL,                 -- copiadas del equipo al solicitar
+  total_clp           INT UNSIGNED NOT NULL,
+  garantia            VARCHAR(255) NULL,
+  estado              ENUM('solicitado', 'aprobado', 'rechazado', 'cancelado', 'entregado', 'devuelto') NOT NULL DEFAULT 'solicitado',
+  retiro_en           DATETIME NULL,
+  retiro_lugar        VARCHAR(160) NULL,
+  comentario_lpt      VARCHAR(500) NULL,                     -- lo recibe el solicitante
+  revisado_por        INT UNSIGNED NULL,
+  revisado_en         DATETIME NULL,
+  creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_prestamo_codigo (codigo),
+  KEY idx_prestamo_estado (estado, creado_en),
+  KEY idx_prestamo_equipo_fechas (equipo_id, fecha_desde, fecha_hasta),
+  KEY idx_prestamo_unidad_fechas (unidad_id, fecha_desde, fecha_hasta),
+  KEY idx_prestamo_email (solicitante_email),
+  CONSTRAINT fk_prestamo_equipo  FOREIGN KEY (equipo_id) REFERENCES equipos (id),
+  CONSTRAINT fk_prestamo_unidad  FOREIGN KEY (unidad_id) REFERENCES equipos_unidades (id),
+  CONSTRAINT fk_prestamo_revisor FOREIGN KEY (revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS prestamos_movimientos (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  prestamo_id   INT UNSIGNED NOT NULL,
+  tipo          VARCHAR(30) NOT NULL,                        -- solicitado, aprobado, rechazado, cancelado...
+  usuario_id    INT UNSIGNED NULL,                           -- NULL = solicitante / sistema
+  comentario    VARCHAR(500) NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_mov_prestamo (prestamo_id, creado_en),
+  CONSTRAINT fk_mov_prestamo FOREIGN KEY (prestamo_id) REFERENCES prestamos (id) ON DELETE CASCADE,
+  CONSTRAINT fk_mov_usuario  FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
 -- Datos iniciales
 -- ---------------------------------------------------------------------
 INSERT INTO servicios_papel (codigo, nombre, descripcion, precio_m2, orden) VALUES

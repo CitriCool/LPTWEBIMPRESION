@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Préstamo de equipos · LPT UCT</title>
+  <meta name="description" content="Préstamo de notebooks, drones y otros equipos del Laboratorio de Planificación Territorial para estudiantes y académicos de la Universidad Católica de Temuco.">
+  <link rel="stylesheet" href="/css/estilos.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23f2c200'/%3E%3Cpath d='M7 9V5h7l3 3v1M6 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-1M7 14h10v5H7z' fill='none' stroke='%231f5aa6' stroke-width='1.8'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="barra">
+    <div class="contenedor barra-int">
+      <a class="marca" href="/">
+        <span class="marca-icono" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 6h16v10H4zM2 19h20M9 16v3M15 16v3"/></svg>
+        </span>
+        <span><b>Préstamo de equipos</b><small>LPT · Universidad Católica de Temuco</small></span>
+      </a>
+      <nav class="nav">
+        <a href="/">Impresión</a>
+        <a href="#equipos">Equipos</a>
+        <a href="#solicitar" class="boton boton-sm">Solicitar</a>
+        <a href="#mi-prestamo">Mi préstamo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="inicio">
+    <section class="hero">
+      <div class="contenedor hero-int">
+        <div>
+          <p class="sobretitulo">Laboratorio de Planificación Territorial</p>
+          <h1>Equipos del LPT para tus clases, terreno e investigación</h1>
+          <p class="lead">Elige el equipo y las fechas, envía tu solicitud y te avisamos por correo cuándo y dónde retirarlo.</p>
+          <div class="acciones">
+            <a class="boton boton-amarillo" href="#equipos">Ver equipos</a>
+            <a class="boton boton-claro" href="#mi-prestamo">Consultar mi préstamo</a>
+          </div>
+        </div>
+        <ul class="hero-datos">
+          <li><b>Estudiantes y académicos</b><span>con correo <span class="js-dominios">@uct.cl o @alu.uct.cl</span></span></li>
+          <li><b>El LPT revisa cada solicitud</b><span>y te confirma el retiro por correo</span></li>
+          <li><b>Devolución en la fecha</b><span>y en las mismas condiciones</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="equipos" class="seccion contenedor">
+      <h2>Equipos disponibles</h2>
+      <div id="catalogo" aria-live="polite"><p class="tenue">Cargando…</p></div>
+    </section>
+
+    <section id="solicitar" class="seccion contenedor">
+      <h2>Solicitar un préstamo</h2>
+      <form id="form-prestamo" class="tarjeta pedido" novalidate>
+        <fieldset>
+          <legend>1. Equipo y fechas</legend>
+          <div class="form-grid">
+            <label class="span-2">Equipo
+              <select name="equipo_id" required></select>
+            </label>
+            <label>Retiro
+              <input name="desde" type="date" required>
+            </label>
+            <label>Devolución
+              <input name="hasta" type="date" required>
+            </label>
+          </div>
+          <div id="info-equipo" class="tenue info-equipo"></div>
+          <output id="resultado-prestamo" class="resultado" aria-live="polite"><span class="tenue">Elige las fechas para ver la disponibilidad.</span></output>
+        </fieldset>
+
+        <fieldset>
+          <legend>2. Tus datos</legend>
+          <div class="form-grid">
+            <label class="span-2">Nombre completo
+              <input name="nombre" autocomplete="name" required maxlength="120">
+            </label>
+            <label>RUT
+              <input name="rut" placeholder="12.345.678-5" required maxlength="20">
+            </label>
+            <label>Teléfono
+              <input name="telefono" type="tel" autocomplete="tel" placeholder="+56 9 1234 5678" required maxlength="30">
+            </label>
+            <label>Correo institucional
+              <input name="email" type="email" autocomplete="email" required maxlength="160" placeholder="nombre@alu.uct.cl">
+            </label>
+            <label>Soy
+              <select name="tipo" required>
+                <option value="">Seleccione…</option>
+                <option value="estudiante">Estudiante</option>
+                <option value="academico">Académico/a</option>
+              </select>
+            </label>
+            <label class="span-2">Carrera o unidad académica
+              <input name="unidad" required maxlength="160">
+            </label>
+            <label class="span-2">¿Para qué lo necesitas?
+              <textarea name="motivo" rows="2" required maxlength="1000" placeholder="Ej. salida a terreno del curso de Cartografía"></textarea>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>3. Condiciones</legend>
+          <ul class="condiciones">
+            <li>El préstamo queda confirmado solo cuando el LPT lo acepta; te avisamos por correo con el día, la hora y el lugar de retiro.</li>
+            <li id="condicion-garantia" hidden></li>
+            <li>Me hago responsable del equipo y sus accesorios, y lo devuelvo en la fecha indicada y en las mismas condiciones.</li>
+          </ul>
+          <label class="check"><input type="checkbox" name="acepta" required> Acepto las condiciones del préstamo.</label>
+        </fieldset>
+
+        <div id="errores-prestamo" class="alerta alerta-error" role="alert" hidden></div>
+        <button class="boton boton-grande" type="submit">Enviar solicitud</button>
+      </form>
+
+      <div id="confirmacion" class="tarjeta confirmacion" hidden tabindex="-1"></div>
+    </section>
+
+    <section id="mi-prestamo" class="seccion contenedor">
+      <div class="tarjeta cotizador">
+        <div>
+          <h2>Mi préstamo</h2>
+          <p class="tenue">Ingresa el código que recibiste por correo (ej. PRE-2026-00001) y tu correo institucional para ver el estado o cancelar.</p>
+        </div>
+        <form id="form-consulta" class="form-grid" novalidate>
+          <label>Código<input name="codigo" required placeholder="PRE-2026-00001"></label>
+          <label>Correo<input name="email" type="email" required></label>
+          <button class="boton" type="submit">Consultar</button>
+          <output id="resultado-consulta" class="resultado" aria-live="polite"></output>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pie">
+    <div class="contenedor">
+      <p><b>Universidad Católica de Temuco · Laboratorio de Planificación Territorial</b></p>
+      <p>Consultas: <a href="mailto:rcallejas@uct.cl">rcallejas@uct.cl</a> · <a href="mailto:lpt@uct.cl">lpt@uct.cl</a></p>
+    </div>
+  </footer>
+
+  <script src="/js/comun.js" defer></script>
+  <script src="/js/prestamos.js" defer></script>
+</body>
+</html>
