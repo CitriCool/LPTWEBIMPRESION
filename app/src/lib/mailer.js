@@ -88,9 +88,9 @@ function adjuntoPdf(p, pdf) {
   return { filename: `${p.codigo}-${p.archivo_nombre}`, content: pdf, contentType: 'application/pdf' };
 }
 
-/** Enlace a "Mi pedido" con el código y el correo ya completados. */
+/** Enlace a "Mi pedido" con el código, el correo y el token que permite subir el comprobante. */
 function enlaceSeguimiento(p) {
-  const q = new URLSearchParams({ codigo: p.codigo, email: p.cliente_email });
+  const q = new URLSearchParams({ codigo: p.codigo, email: p.cliente_email, t: p.acceso_token || '' });
   return `${config.publicUrl}/?${q}#seguimiento`;
 }
 
@@ -208,7 +208,7 @@ async function cambioEstado(p, estado, comentario, notificarCliente) {
 const fechaHora = new Intl.DateTimeFormat('es-CL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 function enlacePrestamo(p) {
-  const q = new URLSearchParams({ codigo: p.codigo, email: p.solicitante_email });
+  const q = new URLSearchParams({ codigo: p.codigo, email: p.solicitante_email, t: p.acceso_token || '' });
   return `${config.publicUrl}/prestamos?${q}#mi-prestamo`;
 }
 

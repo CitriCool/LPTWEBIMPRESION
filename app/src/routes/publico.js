@@ -8,6 +8,7 @@ const pedidos = require('../lib/pedidos');
 const mailer = require('../lib/mailer');
 const { cotizar, ErrorCotizacion } = require('../lib/cotizador');
 const { validarCliente } = require('../lib/validacion');
+const { tokenValido } = require('../lib/acceso');
 
 const router = express.Router();
 const { reglas } = config;
@@ -113,6 +114,8 @@ router.post('/pedidos', limitePedidos, (req, res, next) => {
         fecha_entrega_estimada: pedido.fecha_entrega_estimada,
         instrucciones_pago: mailer.instruccionesPago(pedido.metodo_pago, pedido.codigo),
         email: pedido.cliente_email,
+        // Para subir el comprobante desde esta misma página sin abrir el correo
+        token: pedido.acceso_token,
       });
     } catch (e) {
       next(e);
@@ -120,10 +123,13 @@ router.post('/pedidos', limitePedidos, (req, res, next) => {
   });
 });
 
-/** Seguimiento público: requiere código + correo del cliente. */
+/**
+ * Seguimiento público: requiere código + correo del cliente. Con el token del
+ * enlace del correo (con_enlace) además se puede subir el comprobante.
+ */
 router.post('/seguimiento', limiteConsultas, async (req, res, next) => {
   try {
-    const { codigo, email } = req.body || {};
+    const { codigo, email, token } = req.body || {};
     const p = codigo && email ? await pedidos.buscarPorCodigoYEmail(codigo, email) : null;
     if (!p) return res.status(404).json({ error: 'No encontramos un pedido con ese código y correo.' });
     const hist = await pedidos.historial(p.id);
@@ -141,6 +147,7 @@ router.post('/seguimiento', limiteConsultas, async (req, res, next) => {
       pago_comentario: p.pago_estado === 'rechazado' ? p.pago_comentario : null,
       comprobante_nombre: p.comprobante_nombre,
       acepta_comprobante: pedidos.aceptaComprobante(p),
+      con_enlace: tokenValido(p.acceso_token, token),
       historial: hist.map((h) => ({ fecha: h.creado_en, estado: h.estado })),
     });
   } catch (e) {
@@ -148,7 +155,7 @@ router.post('/seguimiento', limiteConsultas, async (req, res, next) => {
   }
 });
 
-/** El cliente sube la boleta o comprobante de traspaso, identificándose con código + correo. */
+/** El cliente sube la boleta o comprobante de traspaso: código + correo + token del enlace del correo. */
 router.post('/pedidos/comprobante', limitePedidos, (req, res, next) => {
   subidaComprobante.single('archivo')(req, res, async (err) => {
     try {
@@ -156,9 +163,12 @@ router.post('/pedidos/comprobante', limitePedidos, (req, res, next) => {
         if (err.code === 'LIMIT_FILE_SIZE') throw new ErrorCotizacion(`El comprobante supera el máximo de ${reglas.comprobanteMaxBytes / 1024 / 1024} MB.`);
         throw err;
       }
-      const { codigo, email } = req.body || {};
+      const { codigo, email, token } = req.body || {};
       const p = codigo && email ? await pedidos.buscarPorCodigoYEmail(codigo, email) : null;
       if (!p) return res.status(404).json({ error: 'No encontramos un pedido con ese código y correo.' });
+      if (!tokenValido(p.acceso_token, token)) {
+        return res.status(403).json({ error: 'Para subir el comprobante abre el enlace "Subir comprobante de pago" del correo que te enviamos.' });
+      }
       if (!req.file) throw new ErrorCotizacion('Adjunte la boleta o el comprobante de pago.');
 
       const actualizado = await pedidos.guardarComprobante(p, req.file);

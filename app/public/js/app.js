@@ -194,6 +194,7 @@
       const f = $('#form-seguimiento');
       f.codigo.value = r.codigo;
       f.email.value = r.email;
+      tokenPedido = r.token;
       consultar();
     });
     c.focus();
@@ -217,6 +218,9 @@
     rechazado: 'Comprobante rechazado',
   };
 
+  // Token del enlace del correo (o del pedido recién enviado): permite subir el comprobante
+  let tokenPedido = null;
+
   async function consultar(ev) {
     ev?.preventDefault();
     const f = $('#form-seguimiento');
@@ -226,7 +230,7 @@
     out.innerHTML = '<span class="tenue">Buscando…</span>';
     pago.hidden = true;
     try {
-      const r = await api('/api/seguimiento', { method: 'POST', body: { codigo: f.codigo.value, email: f.email.value } });
+      const r = await api('/api/seguimiento', { method: 'POST', body: { codigo: f.codigo.value, email: f.email.value, token: tokenPedido } });
       out.innerHTML = `<span><span class="estado estado-${esc(r.estado_codigo)}">${esc(r.estado)}</span>
           <span class="estado pago-${esc(r.pago_estado)}">${esc(NOMBRE_PAGO[r.pago_estado])}</span></span>
         <span class="tenue">${esc(r.papel)} · ${clp(r.total_clp)} · entrega estimada ${esc(fecha(r.fecha_entrega_estimada))}</span>`;
@@ -244,12 +248,14 @@
       por_revisar: `<p>Recibimos tu comprobante <b>${esc(r.comprobante_nombre)}</b> y lo estamos revisando. Si te equivocaste de archivo, puedes reemplazarlo.</p>`,
       rechazado: `<p class="error"><b>No pudimos validar tu comprobante:</b> ${esc(r.pago_comentario)}</p><p>Sube uno nuevo para continuar.</p>`,
     };
+    const sinEnlace = '<p><b>Para subir el comprobante abre el enlace «Subir comprobante de pago» del correo que te enviamos.</b> Así nadie más puede modificar tu pedido.</p>';
     pago.innerHTML = `
       <div class="alerta alerta-pago">
         <b>${esc(r.metodo_pago_nombre)} · ${clp(r.total_clp)}</b>
         <p>${esc(r.instrucciones_pago)}</p>
         ${textos[r.pago_estado] || ''}
-        <form id="form-comprobante" novalidate>
+        ${r.con_enlace ? '' : sinEnlace}
+        <form ${r.con_enlace ? '' : 'hidden'} id="form-comprobante" novalidate>
           <label>Boleta o comprobante <small class="tenue">(PDF, JPG o PNG, máx. ${CONFIG.reglas.comprobanteMaxMb} MB)</small>
             <input name="archivo" type="file" accept="application/pdf,image/jpeg,image/png" required></label>
           <button class="boton" type="submit">${r.pago_estado === 'por_revisar' ? 'Reemplazar comprobante' : 'Subir comprobante'}</button>
@@ -275,6 +281,7 @@
     const datos = new FormData();
     datos.append('codigo', s.codigo.value);
     datos.append('email', s.email.value);
+    datos.append('token', tokenPedido || '');
     datos.append('archivo', archivo);
     const boton = f.querySelector('button');
     boton.disabled = true;
@@ -290,13 +297,14 @@
     }
   }
 
-  /** El enlace del correo trae ?codigo=…&email=…: se completa y consulta solo. */
+  /** El enlace del correo trae ?codigo=…&email=…&t=…: se completa y consulta solo. */
   function seguimientoDesdeEnlace() {
     const q = new URLSearchParams(location.search);
     if (!q.get('codigo') || !q.get('email')) return;
     const f = $('#form-seguimiento');
     f.codigo.value = q.get('codigo');
     f.email.value = q.get('email');
+    tokenPedido = q.get('t');
     consultar();
   }
 

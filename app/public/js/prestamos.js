@@ -164,13 +164,17 @@
       <span class="tenue">${esc(p.equipo)}${p.inventario ? ` (n° ${esc(p.inventario)})` : ''} · ${esc(rango(p.fecha_desde, p.fecha_hasta))} · ${p.total_clp ? clp(p.total_clp) : 'sin costo'}</span>
       ${retiro}${motivo}
       ${p.estado === 'solicitado' ? '<span class="tenue">El LPT aún está revisando tu solicitud.</span>' : ''}
-      ${p.cancelable ? '<span><button class="boton boton-claro boton-sm" type="button" id="cancelar-prestamo">Ya no lo necesito: cancelar</button></span>' : ''}`;
+      ${p.cancelable && p.con_enlace ? '<span><button class="boton boton-claro boton-sm" type="button" id="cancelar-prestamo">Ya no lo necesito: cancelar</button></span>' : ''}
+      ${p.cancelable && !p.con_enlace ? '<span class="tenue">Para cancelar, abre el enlace «Ver mi préstamo» del correo que te enviamos.</span>' : ''}`;
     $('#cancelar-prestamo')?.addEventListener('click', cancelar);
   }
 
+  // Token del enlace del correo: permite cancelar
+  let tokenPrestamo = null;
+
   function datosConsulta() {
     const f = $('#form-consulta');
-    return { codigo: f.codigo.value, email: f.email.value };
+    return { codigo: f.codigo.value, email: f.email.value, token: tokenPrestamo };
   }
 
   async function consultar(ev) {
@@ -202,6 +206,7 @@
     const f = $('#form-consulta');
     f.codigo.value = q.get('codigo');
     f.email.value = q.get('email');
+    tokenPrestamo = q.get('t');
     consultar();
   }
 

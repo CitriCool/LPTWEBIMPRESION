@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const config = require('../config');
 const prestamos = require('../lib/prestamos');
 const mailer = require('../lib/mailer');
+const { tokenValido } = require('../lib/acceso');
 
 const router = express.Router();
 
@@ -49,7 +50,7 @@ router.post('/', limiteSolicitudes, h(async (req, res) => {
   res.status(201).json({ codigo: p.codigo, email: p.solicitante_email });
 }));
 
-function vistaPublica(p) {
+function vistaPublica(p, conEnlace) {
   return {
     codigo: p.codigo,
     estado: p.estado,
@@ -66,26 +67,32 @@ function vistaPublica(p) {
     retiro_lugar: p.estado === 'aprobado' ? p.retiro_lugar : null,
     comentario_lpt: p.comentario_lpt,
     cancelable: ['solicitado', 'aprobado'].includes(p.estado),
+    // Cancelar exige el enlace del correo (código + correo no bastan: se pueden adivinar)
+    con_enlace: conEnlace,
   };
 }
 
 async function cargar(req, res, next) {
   try {
-    const { codigo, email } = req.body || {};
+    const { codigo, email, token } = req.body || {};
     req.prestamo = codigo && email ? await prestamos.buscarPorCodigoYEmail(codigo, email) : null;
     if (!req.prestamo) return res.status(404).json({ error: 'No encontramos un préstamo con ese código y correo.' });
+    req.conEnlace = tokenValido(req.prestamo.acceso_token, token);
     next();
   } catch (e) {
     next(e);
   }
 }
 
-router.post('/consulta', limiteConsultas, cargar, (req, res) => res.json(vistaPublica(req.prestamo)));
+router.post('/consulta', limiteConsultas, cargar, (req, res) => res.json(vistaPublica(req.prestamo, req.conEnlace)));
 
 router.post('/cancelar', limiteConsultas, cargar, h(async (req, res) => {
+  if (!req.conEnlace) {
+    return res.status(403).json({ error: 'Para cancelar abre el enlace "Ver mi préstamo" del correo que te enviamos.' });
+  }
   const p = await prestamos.cancelarPorSolicitante(req.prestamo);
   mailer.prestamoCancelado(p).catch((e) => console.error(e));
-  res.json(vistaPublica(p));
+  res.json(vistaPublica(p, true));
 }));
 
 module.exports = router;
