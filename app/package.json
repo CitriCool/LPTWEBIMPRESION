@@ -11,16 +11,20 @@
     "crear-usuario": "node scripts/crear-usuario.js",
     "probar-correo": "node scripts/probar-correo.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cookie-session": "^2.1.0",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "jsqr": "^1.4.0",
     "multer": "^2.0.2",
     "mysql2": "^3.12.0",
     "nodemailer": "^6.10.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
   }
 }

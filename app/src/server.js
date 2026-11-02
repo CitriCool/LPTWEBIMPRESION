@@ -47,13 +47,18 @@ app.get('/salud', async (req, res) => {
   }
 });
 
+app.use('/api/prestamos', require('./routes/prestamos-publico'));
 app.use('/api', require('./routes/publico'));
 app.use('/admin/api', require('./routes/admin'));
+// Destino de las etiquetas QR pegadas en los equipos de préstamo
+app.use('/q', require('./routes/qr'));
 
 // pdf-lib en el navegador: lee las medidas del PDF antes de enviarlo
 app.get('/vendor/pdf-lib.min.js', (req, res) =>
   res.sendFile(require.resolve('pdf-lib/dist/pdf-lib.min.js'), { maxAge: '7d' })
 );
+// jsQR: lector de QR con la cámara en el panel, para navegadores sin BarcodeDetector
+app.get('/vendor/jsQR.js', (req, res) => res.sendFile(require.resolve('jsqr/dist/jsQR.js'), { maxAge: '7d' }));
 // no-cache: el navegador revalida con ETag (respuesta 304 si no cambió), así una
 // actualización del sitio o del panel se ve de inmediato sin Ctrl+F5
 app.use(
