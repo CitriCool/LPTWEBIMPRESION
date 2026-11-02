@@ -100,8 +100,19 @@ Cualquier operador consulta el inventario; solo un administrador lo modifica.
 4. En "Mi préstamo" (código + correo, o el enlace del correo) el solicitante ve el estado y puede
    cancelar mientras no haya retirado el equipo.
 
-Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado. La entrega y la
-devolución escaneando el QR vienen en la próxima fase.
+Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado.
+
+### Entrega y devolución con el QR
+
+- En el panel, *Escanear* abre la cámara del celular (requiere https) y lee la etiqueta; también se
+  puede escribir el n° de inventario. Lleva a la ficha de la unidad, que muestra qué hacer:
+- **Entrega:** desde el día de retiro, se confirma que se recibió la garantía y se anota cualquier
+  observación. La unidad pasa a "prestado" y el solicitante recibe un comprobante con la fecha de devolución.
+- **Devolución:** se indica si vuelve sin observaciones, con observaciones o dañada. Si vuelve dañada
+  (o se marca), la unidad queda en mantención y no se presta hasta que un administrador la libere.
+  El solicitante recibe el cierre por correo.
+- Los préstamos entregados cuya fecha de devolución ya pasó aparecen como **Atrasado** en el panel.
+- La entrega y la devolución también se pueden registrar desde el detalle del préstamo.
 
 ## Cómo funciona
 

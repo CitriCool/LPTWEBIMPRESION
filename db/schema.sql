@@ -205,6 +205,15 @@ CREATE TABLE IF NOT EXISTS prestamos (
   comentario_lpt      VARCHAR(500) NULL,                     -- lo recibe el solicitante
   revisado_por        INT UNSIGNED NULL,
   revisado_en         DATETIME NULL,
+  -- Entrega y devolución (se registran escaneando el QR de la unidad)
+  entregado_en        DATETIME NULL,
+  entregado_por       INT UNSIGNED NULL,
+  garantia_recibida   TINYINT(1) NOT NULL DEFAULT 0,
+  observacion_entrega VARCHAR(500) NULL,
+  devuelto_en         DATETIME NULL,
+  devuelto_por        INT UNSIGNED NULL,
+  condicion_devolucion ENUM('ok', 'observaciones', 'danado') NULL,
+  observacion_devolucion VARCHAR(500) NULL,
   creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_prestamo_codigo (codigo),
@@ -214,7 +223,9 @@ CREATE TABLE IF NOT EXISTS prestamos (
   KEY idx_prestamo_email (solicitante_email),
   CONSTRAINT fk_prestamo_equipo  FOREIGN KEY (equipo_id) REFERENCES equipos (id),
   CONSTRAINT fk_prestamo_unidad  FOREIGN KEY (unidad_id) REFERENCES equipos_unidades (id),
-  CONSTRAINT fk_prestamo_revisor FOREIGN KEY (revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+  CONSTRAINT fk_prestamo_revisor FOREIGN KEY (revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_prestamo_entrego FOREIGN KEY (entregado_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_prestamo_recibio FOREIGN KEY (devuelto_por) REFERENCES usuarios (id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS prestamos_movimientos (

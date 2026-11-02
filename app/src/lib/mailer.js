@@ -305,6 +305,40 @@ async function prestamoCancelado(p) {
   });
 }
 
+/** Comprobante de entrega para el solicitante. */
+async function prestamoEntregado(p) {
+  await enviar({
+    to: p.solicitante_email,
+    bcc: config.mail.lpt.join(','),
+    subject: `Préstamo ${p.codigo}: equipo entregado, devolver el ${f.fecha(p.fecha_hasta)}`,
+    html: plantilla('Comprobante de entrega', `
+      <p>Hola ${f.escapar(p.solicitante_nombre)}, registramos la entrega del equipo el ${f.escapar(fechaHora.format(new Date(p.entregado_en)))}.</p>
+      <p style="background:#fff8db;border-left:4px solid #f2c200;padding:12px"><b>Devuélvelo el ${f.escapar(f.fecha(p.fecha_hasta))}</b>
+      en ${f.escapar(p.retiro_lugar || config.prestamos.lugarRetiro)}, con todos sus accesorios.</p>
+      ${p.garantia_recibida && p.garantia ? `<p>Recibimos como garantía: <b>${f.escapar(p.garantia)}</b>. Se te devuelve al entregar el equipo.</p>` : ''}
+      ${p.observacion_entrega ? `<p><b>Observación al entregar:</b> ${f.escapar(p.observacion_entrega)}</p>` : ''}
+      ${tablaPrestamo(p)}`),
+    text: `Préstamo ${p.codigo}: entregamos ${p.equipo_nombre} (n° ${p.unidad_inventario}). Devuélvelo el ${p.fecha_hasta}.`,
+  });
+}
+
+const CONDICION = { ok: 'sin observaciones', observaciones: 'con observaciones', danado: 'con daños' };
+
+/** Cierre del préstamo para el solicitante. */
+async function prestamoDevuelto(p) {
+  await enviar({
+    to: p.solicitante_email,
+    bcc: config.mail.lpt.join(','),
+    subject: `Préstamo ${p.codigo}: devolución registrada`,
+    html: plantilla('Devolución registrada', `
+      <p>Hola ${f.escapar(p.solicitante_nombre)}, recibimos el equipo el ${f.escapar(fechaHora.format(new Date(p.devuelto_en)))}
+      ${f.escapar(CONDICION[p.condicion_devolucion] || '')}. ¡Gracias por cuidarlo!</p>
+      ${p.observacion_devolucion ? `<p><b>Observación del LPT:</b> ${f.escapar(p.observacion_devolucion)}</p>` : ''}
+      ${tablaPrestamo(p)}`),
+    text: `Préstamo ${p.codigo}: recibimos ${p.equipo_nombre} ${CONDICION[p.condicion_devolucion] || ''}. ${p.observacion_devolucion || ''}`,
+  });
+}
+
 module.exports = {
   pedidoRecibido,
   comprobanteRecibido,
@@ -314,6 +348,8 @@ module.exports = {
   prestamoAprobado,
   prestamoRechazado,
   prestamoCancelado,
+  prestamoEntregado,
+  prestamoDevuelto,
   instruccionesPago,
   verificar,
   enviar,

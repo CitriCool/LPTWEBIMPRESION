@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { query, transaccion } = require('./db');
 const { ErrorValidacion, limpiar, rutValido, formatearRut } = require('./validacion');
 const config = require('../config');
+const { fecha } = require('./formato');
 
 const ESTADOS = {
   solicitado: 'Solicitado',
@@ -234,7 +235,10 @@ async function registrar(id, tipo, usuarioId, comentario, set, params = []) {
 async function listar({ estado, q, limite = 100 }) {
   const where = [];
   const params = [];
-  if (estado && ESTADOS[estado]) {
+  if (estado === 'atrasado') {
+    where.push("p.estado = 'entregado' AND p.fecha_hasta < ?");
+    params.push(hoy());
+  } else if (estado && ESTADOS[estado]) {
     where.push('p.estado = ?');
     params.push(estado);
   }
@@ -250,9 +254,20 @@ async function listar({ estado, q, limite = 100 }) {
 }
 
 async function resumen() {
-  const filas = await query('SELECT estado, COUNT(*) AS cantidad FROM prestamos GROUP BY estado');
-  return Object.keys(ESTADOS).map((e) => ({ codigo: e, nombre: ESTADOS[e], cantidad: filas.find((f) => f.estado === e)?.cantidad || 0 }));
+  const [filas, [atrasados]] = await Promise.all([
+    query('SELECT estado, COUNT(*) AS cantidad FROM prestamos GROUP BY estado'),
+    query("SELECT COUNT(*) AS cantidad FROM prestamos WHERE estado = 'entregado' AND fecha_hasta < ?", [hoy()]),
+  ]);
+  const lista = Object.keys(ESTADOS).map((e) => ({ codigo: e, nombre: ESTADOS[e], cantidad: filas.find((f) => f.estado === e)?.cantidad || 0 }));
+  // Los atrasados son entregados cuya fecha de devolución ya pasó
+  lista.splice(lista.findIndex((e) => e.codigo === 'entregado') + 1, 0, { codigo: 'atrasado', nombre: 'Atrasado', cantidad: atrasados.cantidad });
+  return lista;
 }
+
+const atrasado = (p, h = hoy()) => p.estado === 'entregado' && p.fecha_hasta < h;
+// Día en que se puede retirar: el fijado al aceptar o, si falta, el primer día del préstamo
+const diaRetiro = (p) => (p.retiro_en ? hoy(new Date(p.retiro_en)) : p.fecha_desde);
+const entregableHoy = (p, h = hoy()) => p.estado === 'aprobado' && diaRetiro(p) <= h && h <= p.fecha_hasta;
 
 async function movimientos(id) {
   return query(
@@ -315,7 +330,92 @@ async function rechazar(p, comentario, usuarioId) {
   return obtener(p.id);
 }
 
+
+const CONDICIONES = { ok: 'Sin observaciones', observaciones: 'Con observaciones', danado: 'Dañado' };
+
+/**
+ * Entrega al solicitante la unidad asignada (se registra escaneando su QR).
+ * La unidad pasa a "prestado" hasta la devolución.
+ */
+async function entregar(id, { garantia_recibida, observacion }, usuarioId) {
+  const nota = limpiar(observacion, 500) || null;
+  await transaccion(async (conn) => {
+    const [[p]] = await conn.query('SELECT * FROM prestamos WHERE id = ? FOR UPDATE', [id]);
+    if (!p) throw errorPublico('Préstamo no encontrado.', 404);
+    if (p.estado !== 'aprobado') throw errorPublico('Solo se entrega un préstamo aceptado que aún no se retira.', 409);
+    if (p.fecha_hasta < hoy()) throw errorPublico('La fecha de devolución de este préstamo ya pasó: anúlelo y pida una solicitud nueva.', 409);
+    if (!entregableHoy(p)) throw errorPublico(`El retiro está fijado para el ${fecha(diaRetiro(p))}; no se entrega antes.`, 409);
+    if (p.garantia && !garantia_recibida) throw new ErrorValidacion({ garantia_recibida: `Confirme que recibió la garantía (${p.garantia}).` });
+    const [[u]] = await conn.query('SELECT id, inventario, estado FROM equipos_unidades WHERE id = ? FOR UPDATE', [p.unidad_id]);
+    if (u.estado === 'prestado') {
+      const [[otro]] = await conn.query("SELECT codigo FROM prestamos WHERE unidad_id = ? AND estado = 'entregado' LIMIT 1", [u.id]);
+      throw errorPublico(`La unidad ${u.inventario} aún no se devuelve${otro ? ` (préstamo ${otro.codigo})` : ''}.`, 409);
+    }
+    if (u.estado !== 'disponible') throw errorPublico(`La unidad ${u.inventario} está en mantención o de baja.`, 409);
+    await conn.query(
+      `UPDATE prestamos SET estado = 'entregado', entregado_en = NOW(), entregado_por = ?, garantia_recibida = ?,
+       observacion_entrega = ? WHERE id = ?`,
+      [usuarioId, Boolean(garantia_recibida), nota, p.id]
+    );
+    await conn.query("UPDATE equipos_unidades SET estado = 'prestado' WHERE id = ?", [u.id]);
+    await conn.query("INSERT INTO prestamos_movimientos (prestamo_id, tipo, usuario_id, comentario) VALUES (?, 'entregado', ?, ?)", [
+      p.id, usuarioId, nota,
+    ]);
+  });
+  return obtener(id);
+}
+
+/**
+ * Recibe el equipo de vuelta. Si vuelve dañado (o se marca), la unidad queda
+ * en mantención y no se puede volver a prestar hasta que el admin la libere.
+ */
+async function recibir(id, { condicion, observacion, mantencion }, usuarioId) {
+  if (!CONDICIONES[condicion]) throw new ErrorValidacion({ condicion: 'Indique en qué estado vuelve el equipo.' });
+  const nota = limpiar(observacion, 500) || null;
+  if (condicion !== 'ok' && !nota) throw new ErrorValidacion({ observacion: 'Describa las observaciones o el daño.' });
+  const aMantencion = condicion === 'danado' || Boolean(mantencion);
+  await transaccion(async (conn) => {
+    const [[p]] = await conn.query('SELECT * FROM prestamos WHERE id = ? FOR UPDATE', [id]);
+    if (!p) throw errorPublico('Préstamo no encontrado.', 404);
+    if (p.estado !== 'entregado') throw errorPublico('Este préstamo no tiene un equipo por devolver.', 409);
+    await conn.query(
+      `UPDATE prestamos SET estado = 'devuelto', devuelto_en = NOW(), devuelto_por = ?, condicion_devolucion = ?,
+       observacion_devolucion = ? WHERE id = ?`,
+      [usuarioId, condicion, nota, p.id]
+    );
+    await conn.query('UPDATE equipos_unidades SET estado = ? WHERE id = ?', [aMantencion ? 'mantencion' : 'disponible', p.unidad_id]);
+    const detalle = [CONDICIONES[condicion], nota, aMantencion ? 'Unidad enviada a mantención' : null].filter(Boolean).join('. ');
+    await conn.query("INSERT INTO prestamos_movimientos (prestamo_id, tipo, usuario_id, comentario) VALUES (?, 'devuelto', ?, ?)", [
+      p.id, usuarioId, detalle,
+    ]);
+  });
+  return obtener(id);
+}
+
+/** Préstamos de una unidad para su ficha: el que está afuera, los próximos y los últimos cerrados. */
+async function deUnidad(unidadId) {
+  const filas = await query(
+    `SELECT id, codigo, estado, solicitante_nombre, fecha_desde, fecha_hasta, retiro_en, garantia,
+            entregado_en, devuelto_en, condicion_devolucion
+     FROM prestamos WHERE unidad_id = ? AND estado IN ('aprobado', 'entregado', 'devuelto')
+     ORDER BY fecha_desde DESC, id DESC LIMIT 50`,
+    [unidadId]
+  );
+  const actual = filas.find((p) => p.estado === 'entregado');
+  return {
+    actual: actual ? { ...actual, atrasado: atrasado(actual) } : null,
+    proximos: filas.filter((p) => p.estado === 'aprobado').reverse().map((p) => ({ ...p, entregable: entregableHoy(p) })),
+    historial: filas.filter((p) => p.estado === 'devuelto').slice(0, 10),
+  };
+}
+
 module.exports = {
+  CONDICIONES,
+  atrasado,
+  entregableHoy,
+  entregar,
+  recibir,
+  deUnidad,
   ESTADOS,
   TIPOS,
   hoy,

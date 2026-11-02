@@ -12,7 +12,7 @@
     rechazado: 'Rechazado',
   };
   const ESTADOS_CON_PAGO = ['en_impresion', 'listo', 'entregado'];
-  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos', 'vista-prestamos'];
+  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos', 'vista-prestamos', 'vista-escaner'];
   let usuario = null;
   let estados = [];
   let filtroEstado = '';
@@ -20,6 +20,7 @@
   let temporizadorBusqueda;
 
   function mostrar(id) {
+    if (id !== 'vista-escaner') detenerEscaneo();
     VISTAS.forEach((v) => ($('#' + v).hidden = v !== id));
     $('#nav-admin').hidden = id === 'vista-login';
   }
@@ -474,6 +475,7 @@
     v.innerHTML = `<a href="#equipo/${u.equipo_id}" class="volver">← Volver a ${esc(u.equipo_nombre)}</a>
       <h1>${esc(u.inventario)} <span class="estado unidad-${esc(u.estado)}">${ESTADO_UNIDAD[u.estado]}</span></h1>
       <p class="tenue">${esc(u.equipo_nombre)}${u.marca_modelo ? ` · ${esc(u.marca_modelo)}` : ''} · ${esc(u.categoria_nombre)}</p>
+      ${tarjetaPrestamosUnidad(u)}
       <div class="detalle-grid">
         <form class="tarjeta pila" id="form-unidad"><h3>Ficha de la unidad</h3>${camposUnidad(u, esAdmin)}
           ${esAdmin ? '<button class="boton boton-claro" type="submit">Guardar cambios</button>' : ''}</form>
@@ -487,6 +489,7 @@
           </div>
         </div>
       </div>`;
+    conectarMovimientos(v, () => cargarUnidad(u.id));
     if (!esAdmin) return;
     enviar($('#form-unidad'), async (d) => {
       await llamar(`/admin/api/unidades/${u.id}`, { method: 'PUT', body: d });
@@ -535,7 +538,7 @@
   }
 
   // ---------- Solicitudes de préstamo ----------
-  const ESTADO_PRESTAMO = { solicitado: 'Solicitado', aprobado: 'Aceptado', rechazado: 'Rechazado', cancelado: 'Cancelado', entregado: 'Entregado', devuelto: 'Devuelto' };
+  const ESTADO_PRESTAMO = { solicitado: 'Solicitado', aprobado: 'Aceptado', rechazado: 'Rechazado', cancelado: 'Cancelado', entregado: 'Entregado', devuelto: 'Devuelto', atrasado: 'Atrasado' };
   const TIPO_SOLICITANTE = { estudiante: 'Estudiante', academico: 'Académico/a' };
   let filtroPrestamo = 'solicitado';
 
@@ -567,7 +570,7 @@
                 <td>${esc(p.equipo_nombre)}${p.unidad_inventario ? `<br><small class="tenue">n° ${esc(p.unidad_inventario)}</small>` : ''}</td>
                 <td>${esc(rangoFechas(p))}</td>
                 <td>${p.retiro_en ? esc(fechaHora(p.retiro_en)) : ''}</td>
-                <td><span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span></td></tr>`)
+                <td><span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span>${p.atrasado ? ' <span class="estado prestamo-atrasado">Atrasado</span>' : ''}</td></tr>`)
               .join('')
           : '<tr><td colspan="6" class="tenue">No hay préstamos con este filtro.</td></tr>'}</tbody>
       </table></div>`;
@@ -616,7 +619,14 @@
             <label>Comentario para el solicitante <small class="tenue">(opcional)</small><textarea name="comentario" rows="2" maxlength="500"></textarea></label>
             <button class="boton" type="submit" ${p.unidades_libres.length ? '' : 'disabled'}>Aceptar y avisar por correo</button>
           </form>`
-        : '';
+        : p.estado === 'aprobado'
+          ? `<div class="tarjeta pila"><h3>Entregar unidad ${esc(p.unidad_inventario)}</h3>
+              ${p.entregable
+                ? `<p class="tenue">También puede escanear el QR de la unidad desde <a href="#escanear">Escanear</a>.</p>${formEntregar(p)}`
+                : '<p class="tenue">Se podrá entregar desde el día de retiro.</p>'}</div>`
+          : p.estado === 'entregado'
+            ? `<div class="tarjeta pila"><h3>Recibir devolución</h3>${formRecibir(p)}</div>`
+            : '';
     const rechazo = ['solicitado', 'aprobado'].includes(p.estado)
       ? `<form class="tarjeta pila" id="form-rechazar">
           <h3>${p.estado === 'solicitado' ? 'Rechazar solicitud' : 'Anular préstamo aceptado'}</h3>
@@ -625,7 +635,7 @@
         </form>`
       : '';
     v.innerHTML = `<a href="#prestamos" class="volver">← Volver a préstamos</a>
-      <h1>${esc(p.codigo)} <span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span></h1>
+      <h1>${esc(p.codigo)} <span class="estado prestamo-${esc(p.estado)}">${ESTADO_PRESTAMO[p.estado]}</span>${p.atrasado ? ' <span class="estado prestamo-atrasado">Atrasado</span>' : ''}</h1>
       <p class="tenue">Solicitado el ${esc(fechaHora(p.creado_en))}</p>
       <div class="detalle-grid">
         <div class="pila">
@@ -639,6 +649,8 @@
               ${p.garantia ? `<dt>Garantía</dt><dd>${esc(p.garantia)}</dd>` : ''}
               ${p.retiro_en ? `<dt>Retiro</dt><dd>${esc(fechaHora(p.retiro_en))} · ${esc(p.retiro_lugar)}</dd>` : ''}
               ${p.comentario_lpt ? `<dt>Comentario LPT</dt><dd>${esc(p.comentario_lpt)}</dd>` : ''}
+              ${p.entregado_en ? `<dt>Entregado</dt><dd>${esc(fechaHora(p.entregado_en))}${p.garantia ? ` · garantía ${p.garantia_recibida ? 'recibida' : 'no registrada'}` : ''}${p.observacion_entrega ? `<br><span class="tenue">${esc(p.observacion_entrega)}</span>` : ''}</dd>` : ''}
+              ${p.devuelto_en ? `<dt>Devuelto</dt><dd>${esc(fechaHora(p.devuelto_en))} · ${esc(CONDICION[p.condicion_devolucion])}${p.observacion_devolucion ? `<br><span class="tenue">${esc(p.observacion_devolucion)}</span>` : ''}</dd>` : ''}
               <dt>Motivo</dt><dd>${esc(p.motivo)}</dd>
             </dl>
           </div>
@@ -664,6 +676,7 @@
         </div>
       </div>`;
 
+    conectarMovimientos(v, () => cargarPrestamo(p.id));
     const fa = $('#form-aprobar');
     if (fa) {
       enviar(fa, async (d) => {
@@ -682,6 +695,177 @@
     }
   }
 
+  // ---------- Entrega y devolución ----------
+  const CONDICION = { ok: 'Sin observaciones', observaciones: 'Con observaciones', danado: 'Dañado' };
+
+  function formEntregar(p) {
+    return `<form class="pila form-entregar" data-prestamo="${p.id}">
+      ${p.garantia
+        ? `<label class="check"><input type="checkbox" name="garantia_recibida" required> Recibí la garantía: <b>${esc(p.garantia)}</b></label>`
+        : ''}
+      <label>Observación al entregar <small class="tenue">(opcional: rayas, accesorios que faltan…)</small>
+        <textarea name="observacion" rows="2" maxlength="500"></textarea></label>
+      <button class="boton" type="submit">Registrar entrega</button>
+    </form>`;
+  }
+
+  function formRecibir(p) {
+    return `<form class="pila form-recibir" data-prestamo="${p.id}">
+      <fieldset class="opciones-condicion"><legend class="h3">¿Cómo vuelve el equipo?</legend>
+        ${Object.entries(CONDICION)
+          .map(([k, v], i) => `<label class="check"><input type="radio" name="condicion" value="${k}" ${i ? '' : 'checked'} required> ${v}</label>`)
+          .join('')}
+      </fieldset>
+      <label>Observación <small class="tenue">(obligatoria si hay observaciones o daño; la recibe el solicitante)</small>
+        <textarea name="observacion" rows="2" maxlength="500"></textarea></label>
+      <label class="check"><input type="checkbox" name="mantencion"> Enviar la unidad a mantención (si vuelve dañada se envía siempre)</label>
+      ${p.garantia && p.garantia_recibida !== 0 ? `<p class="tenue">Devuelva la garantía: <b>${esc(p.garantia)}</b>.</p>` : ''}
+      <button class="boton" type="submit">Registrar devolución</button>
+    </form>`;
+  }
+
+  /** Conecta los formularios de entrega y devolución que haya dentro de `raiz`. */
+  function conectarMovimientos(raiz, recargar) {
+    raiz.querySelectorAll('form.form-entregar').forEach((f) =>
+      enviar(f, async (d) => {
+        await llamar(`/admin/api/prestamos/${f.dataset.prestamo}/entregar`, { method: 'POST', body: d });
+        aviso('Entrega registrada; se envió el comprobante al solicitante');
+        recargar();
+      })
+    );
+    raiz.querySelectorAll('form.form-recibir').forEach((f) =>
+      enviar(f, async (d) => {
+        if (d.condicion !== 'ok' && !d.observacion.trim()) throw new Error('Describa las observaciones o el daño.');
+        await llamar(`/admin/api/prestamos/${f.dataset.prestamo}/recibir`, { method: 'POST', body: d });
+        aviso('Devolución registrada');
+        recargar();
+      })
+    );
+  }
+
+  /** Tarjeta de la ficha de unidad: quién la tiene, quién la retira después y su historial. */
+  function tarjetaPrestamosUnidad(u) {
+    const { actual, proximos, historial } = u.prestamos;
+    const quien = (p) => `<a href="#prestamo/${p.id}"><b>${esc(p.codigo)}</b></a> · ${esc(p.solicitante_nombre)} · ${esc(rangoFechas(p))}`;
+    let principal;
+    if (actual) {
+      principal = `<p>Prestada a ${quien(actual)} ${actual.atrasado ? '<span class="estado prestamo-atrasado">Atrasado</span>' : ''}</p>
+        <p class="tenue">Entregada el ${esc(fechaHora(actual.entregado_en))}</p>${formRecibir(actual)}`;
+    } else if (proximos.length) {
+      const p = proximos[0];
+      principal = `<p>Próximo retiro: ${quien(p)}${p.retiro_en ? ` · retiro ${esc(fechaHora(p.retiro_en))}` : ''}</p>
+        ${u.estado !== 'disponible'
+          ? `<p class="error">La unidad está ${esc(ESTADO_UNIDAD[u.estado].toLowerCase())}: no se puede entregar.</p>`
+          : p.entregable ? formEntregar(p) : '<p class="tenue">Se podrá entregar desde el día de retiro.</p>'}`;
+    } else {
+      principal = '<p class="tenue">Sin préstamos pendientes para esta unidad.</p>';
+    }
+    const siguientes = (actual ? proximos : proximos.slice(1)).map((p) => `<li>${quien(p)}</li>`).join('');
+    return `<div class="tarjeta pila tarjeta-prestamo">
+      <h3>${actual ? 'Devolución' : proximos.length ? 'Entrega' : 'Préstamos'}</h3>
+      ${principal}
+      ${siguientes ? `<div><b>Próximos aceptados</b><ul class="historial">${siguientes}</ul></div>` : ''}
+      ${historial.length
+        ? `<details><summary>Últimas devoluciones (${historial.length})</summary><ul class="historial">${historial
+            .map((p) => `<li>${quien(p)} · ${esc(CONDICION[p.condicion_devolucion] || '')}</li>`)
+            .join('')}</ul></details>`
+        : ''}
+    </div>`;
+  }
+
+  // ---------- Escáner QR ----------
+  let escaneo = null;
+
+  function detenerEscaneo() {
+    if (!escaneo) return;
+    escaneo.activo = false;
+    escaneo.stream?.getTracks().forEach((t) => t.stop());
+    escaneo = null;
+  }
+
+  function cargarScript(src) {
+    return new Promise((ok, falla) => {
+      if (document.querySelector(`script[src="${src}"]`)) return ok();
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = ok;
+      s.onerror = falla;
+      document.head.append(s);
+    });
+  }
+
+  /** Lee un QR con la cámara; al encontrar una etiqueta del LPT abre la ficha de la unidad. */
+  async function cargarEscaner() {
+    mostrar('vista-escaner');
+    const v = $('#vista-escaner');
+    v.innerHTML = `<h1>Escanear etiqueta</h1>
+      <p class="tenue">Apunte la cámara al QR del equipo para registrar la entrega o la devolución.</p>
+      <div class="escaner"><video id="video-qr" playsinline muted></video></div>
+      <p id="estado-escaner" class="tenue" role="status">Abriendo la cámara…</p>
+      <form id="form-escaner-inventario" class="filtros"><input name="inventario" placeholder="O escriba el n° de inventario" required>
+        <button class="boton boton-claro boton-sm" type="submit">Buscar</button></form>`;
+    enviar($('#form-escaner-inventario'), async (d) => {
+      const u = await llamar(`/admin/api/unidades/buscar?${new URLSearchParams({ inventario: d.inventario })}`);
+      location.hash = `unidad/${u.id}`;
+    });
+
+    const estado = $('#estado-escaner');
+    if (!navigator.mediaDevices?.getUserMedia) {
+      estado.textContent = 'Este navegador no permite usar la cámara aquí (el sitio debe abrirse con https). Use el n° de inventario.';
+      return;
+    }
+    const sesion = { activo: true };
+    escaneo = sesion;
+    try {
+      sesion.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch {
+      estado.textContent = 'No se pudo abrir la cámara (¿se negó el permiso?). Use el n° de inventario.';
+      return;
+    }
+    if (!sesion.activo) return sesion.stream.getTracks().forEach((t) => t.stop());
+    const video = $('#video-qr');
+    video.srcObject = sesion.stream;
+    await video.play();
+    estado.textContent = 'Buscando un código QR…';
+
+    // BarcodeDetector nativo (Chrome/Android); si no existe, jsQR
+    let detectar;
+    if ('BarcodeDetector' in window && (await BarcodeDetector.getSupportedFormats()).includes('qr_code')) {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      detectar = async () => (await detector.detect(video))[0]?.rawValue;
+    } else {
+      await cargarScript('/vendor/jsQR.js');
+      const lienzo = document.createElement('canvas');
+      const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+      detectar = async () => {
+        lienzo.width = video.videoWidth;
+        lienzo.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        return window.jsQR(ctx.getImageData(0, 0, lienzo.width, lienzo.height).data, lienzo.width, lienzo.height)?.data;
+      };
+    }
+
+    const buscar = async () => {
+      if (!sesion.activo) return;
+      try {
+        const texto = video.readyState >= 2 ? await detectar() : null;
+        const m = texto && /\/q\/([\w-]{12})(?:$|[?#])/.exec(texto);
+        if (m) {
+          detenerEscaneo();
+          return abrirQr(m[1]).catch((e) => {
+            aviso(e.message);
+            location.hash = 'escanear';
+          });
+        }
+        if (texto) estado.textContent = 'Ese QR no es una etiqueta de equipos del LPT.';
+      } catch {
+        // cuadro ilegible: se reintenta en el siguiente
+      }
+      setTimeout(buscar, 250);
+    };
+    buscar();
+  }
+
   // ---------- Rutas ----------
   function enrutar() {
     if (!usuario) return mostrar('vista-login');
@@ -691,6 +875,7 @@
     if ((m = /^pedido\/(\d+)$/.exec(h))) accion = cargarDetalle(m[1]);
     else if (h === 'papeles') accion = cargarPapeles();
     else if (h === 'usuarios') accion = cargarUsuarios();
+    else if (h === 'escanear') accion = cargarEscaner();
     else if (h === 'prestamos') accion = cargarPrestamos();
     else if ((m = /^prestamo\/(\d+)$/.exec(h))) accion = cargarPrestamo(m[1]);
     else if (h === 'equipos') accion = cargarEquipos();

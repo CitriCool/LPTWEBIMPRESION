@@ -106,6 +106,16 @@ const CAMBIOS = [
      CONSTRAINT fk_mov_prestamo FOREIGN KEY (prestamo_id) REFERENCES prestamos (id) ON DELETE CASCADE,
      CONSTRAINT fk_mov_usuario  FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL
    ) ENGINE=InnoDB`,
+  // Fase 3: entrega y devolución de préstamos
+  `ALTER TABLE prestamos
+     ADD COLUMN IF NOT EXISTS entregado_en DATETIME NULL AFTER revisado_en,
+     ADD COLUMN IF NOT EXISTS entregado_por INT UNSIGNED NULL AFTER entregado_en,
+     ADD COLUMN IF NOT EXISTS garantia_recibida TINYINT(1) NOT NULL DEFAULT 0 AFTER entregado_por,
+     ADD COLUMN IF NOT EXISTS observacion_entrega VARCHAR(500) NULL AFTER garantia_recibida,
+     ADD COLUMN IF NOT EXISTS devuelto_en DATETIME NULL AFTER observacion_entrega,
+     ADD COLUMN IF NOT EXISTS devuelto_por INT UNSIGNED NULL AFTER devuelto_en,
+     ADD COLUMN IF NOT EXISTS condicion_devolucion ENUM('ok', 'observaciones', 'danado') NULL AFTER devuelto_por,
+     ADD COLUMN IF NOT EXISTS observacion_devolucion VARCHAR(500) NULL AFTER condicion_devolucion`,
   // Categorías de partida solo si no hay ninguna (no revive las que el admin renombró)
   `INSERT INTO equipos_categorias (nombre, orden)
      SELECT * FROM (SELECT 'Notebooks', 1 UNION ALL SELECT 'Drones', 2) AS iniciales
@@ -124,6 +134,16 @@ async function migrar() {
       `ALTER TABLE cotizaciones_pedidos ADD CONSTRAINT fk_pedido_revisor
        FOREIGN KEY (pago_revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL`
     );
+  }
+  for (const [nombre, columna] of [['fk_prestamo_entrego', 'entregado_por'], ['fk_prestamo_recibio', 'devuelto_por']]) {
+    const [hay] = await query(
+      `SELECT 1 AS hay FROM information_schema.TABLE_CONSTRAINTS
+       WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'prestamos' AND CONSTRAINT_NAME = ?`,
+      [nombre]
+    );
+    if (!hay) {
+      await query(`ALTER TABLE prestamos ADD CONSTRAINT ${nombre} FOREIGN KEY (${columna}) REFERENCES usuarios (id) ON DELETE SET NULL`);
+    }
   }
 }
 

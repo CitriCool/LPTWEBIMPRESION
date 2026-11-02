@@ -42,3 +42,15 @@ test('solicitud: exige datos, correo UCT y aceptar condiciones', () => {
   assert.throws(() => validarSolicitud({ ...base, acepta: false }), /condiciones/);
   assert.throws(() => validarSolicitud({ ...base, tipo: 'otro' }), /estudiante/);
 });
+
+test('entrega: desde el día de retiro hasta la devolución; atraso después', () => {
+  const { entregableHoy, atrasado } = require('../src/lib/prestamos');
+  const p = { estado: 'aprobado', retiro_en: null, fecha_desde: '2026-11-05', fecha_hasta: '2026-11-06' };
+  assert.equal(entregableHoy(p, '2026-11-04'), false);
+  assert.equal(entregableHoy(p, '2026-11-05'), true);
+  assert.equal(entregableHoy(p, '2026-11-07'), false);
+  assert.equal(entregableHoy({ ...p, estado: 'solicitado' }, '2026-11-05'), false);
+  const fuera = { estado: 'entregado', fecha_hasta: '2026-11-06' };
+  assert.equal(atrasado(fuera, '2026-11-06'), false);
+  assert.equal(atrasado(fuera, '2026-11-07'), true);
+});

@@ -4,6 +4,7 @@
 // después de exigir sesión: cualquier operador consulta, solo un admin modifica.
 const express = require('express');
 const equipos = require('../lib/equipos');
+const prestamos = require('../lib/prestamos');
 
 const router = express.Router();
 
@@ -72,7 +73,8 @@ async function cargarUnidad(req, res, next) {
 
 router.get('/unidades/:id', cargarUnidad, h(async (req, res) => {
   const { qr_token, ...u } = req.unidad;
-  res.json({ ...u, qr_url: equipos.urlQr(qr_token), qr_svg: await equipos.qrSvg(qr_token) });
+  const [qr_svg, deUnidad] = await Promise.all([equipos.qrSvg(qr_token), prestamos.deUnidad(u.id)]);
+  res.json({ ...u, qr_url: equipos.urlQr(qr_token), qr_svg, prestamos: deUnidad });
 }));
 
 router.put('/unidades/:id', requiereAdmin, cargarUnidad, h(async (req, res) => {

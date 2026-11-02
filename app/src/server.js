@@ -57,6 +57,8 @@ app.use('/q', require('./routes/qr'));
 app.get('/vendor/pdf-lib.min.js', (req, res) =>
   res.sendFile(require.resolve('pdf-lib/dist/pdf-lib.min.js'), { maxAge: '7d' })
 );
+// jsQR: lector de QR con la cámara en el panel, para navegadores sin BarcodeDetector
+app.get('/vendor/jsQR.js', (req, res) => res.sendFile(require.resolve('jsqr/dist/jsQR.js'), { maxAge: '7d' }));
 // no-cache: el navegador revalida con ETag (respuesta 304 si no cambió), así una
 // actualización del sitio o del panel se ve de inmediato sin Ctrl+F5
 app.use(
