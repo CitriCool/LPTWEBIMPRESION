@@ -6,6 +6,7 @@ const path = require('path');
 const { query, transaccion } = require('./db');
 const { cotizar, sumarDiasHabiles, ErrorCotizacion } = require('./cotizador');
 const { analizarPdf } = require('./pdf');
+const { nuevoTokenAcceso } = require('./acceso');
 const config = require('../config');
 
 const SELECT_PEDIDO = `
@@ -23,7 +24,8 @@ async function listarPapeles({ soloActivos = true } = {}) {
 }
 
 async function obtenerPapel(codigo) {
-  const [papel] = await query('SELECT * FROM servicios_papel WHERE codigo = ? AND activo = 1', [codigo]);
+  // String(): mysql2 convierte un objeto en "col = valor", y el código llega del cliente
+  const [papel] = await query('SELECT * FROM servicios_papel WHERE codigo = ? AND activo = 1', [String(codigo ?? '')]);
   if (!papel) throw new ErrorCotizacion('Seleccione un tipo de papel válido.');
   return papel;
 }
@@ -56,12 +58,13 @@ async function crearPedido({ cliente, papelCodigo, copias, archivo }) {
     const id = await transaccion(async (conn) => {
       const [r] = await conn.query(
         `INSERT INTO cotizaciones_pedidos
-          (codigo, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_unidad, metodo_pago,
+          (codigo, acceso_token, cliente_nombre, cliente_rut, cliente_email, cliente_telefono, cliente_unidad, metodo_pago,
            papel_id, copias, paginas, ancho_m, alto_m, area_m2, precio_m2, total_clp, observaciones,
            archivo_nombre, archivo_ruta, archivo_bytes, archivo_sha256, estado_id, fecha_entrega_estimada)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
         [
           `TMP-${crypto.randomBytes(6).toString('hex')}`,
+          nuevoTokenAcceso(),
           cliente.nombre, cliente.rut, cliente.email, cliente.telefono, cliente.unidad, cliente.metodo_pago,
           papel.id, cot.copias, cot.paginas, cot.ancho_m, cot.alto_m, cot.area_m2, cot.precio_m2, cot.total_clp,
           cliente.observaciones, nombreOriginal, nombreInterno, archivo.buffer.length, sha256, entrega,

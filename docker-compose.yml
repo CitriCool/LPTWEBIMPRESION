@@ -4,7 +4,7 @@
 #   -> http://localhost:3000  (panel en /admin)
 #
 # Producción con dominio propio y HTTPS automático (Caddy + Let's Encrypt):
-#   definir DOMINIO en .env y ejecutar
+#   definir DOMINIO y APP_PORT=127.0.0.1:3000 en .env y ejecutar
 #   docker compose --profile produccion up -d --build
 
 services:

@@ -1,6 +1,7 @@
 'use strict';
 
 const { query } = require('./db');
+const { nuevoTokenAcceso } = require('./acceso');
 
 // db/schema.sql solo corre cuando se crea el volumen de MariaDB. Estos cambios
 // ponen al día una base creada con una versión anterior; cada uno es idempotente.
@@ -116,6 +117,11 @@ const CAMBIOS = [
      ADD COLUMN IF NOT EXISTS devuelto_por INT UNSIGNED NULL AFTER devuelto_en,
      ADD COLUMN IF NOT EXISTS condicion_devolucion ENUM('ok', 'observaciones', 'danado') NULL AFTER devuelto_por,
      ADD COLUMN IF NOT EXISTS observacion_devolucion VARCHAR(500) NULL AFTER condicion_devolucion`,
+  // Revisión de seguridad: cerrar sesión invalida la cookie, y enlaces con token
+  // para que solo quien recibió el correo cancele o suba el comprobante
+  `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS sesion_desde DATETIME(3) NULL AFTER ultimo_acceso`,
+  `ALTER TABLE cotizaciones_pedidos ADD COLUMN IF NOT EXISTS acceso_token CHAR(22) NULL AFTER codigo`,
+  `ALTER TABLE prestamos ADD COLUMN IF NOT EXISTS acceso_token CHAR(22) NULL AFTER codigo`,
   // Categorías de partida solo si no hay ninguna (no revive las que el admin renombró)
   `INSERT INTO equipos_categorias (nombre, orden)
      SELECT * FROM (SELECT 'Notebooks', 1 UNION ALL SELECT 'Drones', 2) AS iniciales
@@ -124,6 +130,12 @@ const CAMBIOS = [
 
 async function migrar() {
   for (const sql of CAMBIOS) await query(sql);
+  // Pedidos y préstamos creados antes del token: se les asigna uno (sus enlaces
+  // antiguos siguen sirviendo para consultar, no para modificar)
+  for (const tabla of ['cotizaciones_pedidos', 'prestamos']) {
+    const filas = await query(`SELECT id FROM ${tabla} WHERE acceso_token IS NULL`);
+    for (const { id } of filas) await query(`UPDATE ${tabla} SET acceso_token = ? WHERE id = ?`, [nuevoTokenAcceso(), id]);
+  }
   // La clave foránea no admite IF NOT EXISTS en MariaDB: se agrega solo si falta
   const [fk] = await query(
     `SELECT 1 AS hay FROM information_schema.TABLE_CONSTRAINTS

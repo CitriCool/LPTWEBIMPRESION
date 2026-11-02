@@ -9,6 +9,33 @@ function lista(valor, porDefecto) {
     .filter(Boolean);
 }
 
+// Valores de ejemplo de .env.example y por defecto: nunca deben llegar a producción
+const CLAVES_DE_EJEMPLO = [
+  'solo-desarrollo-cambiar',
+  'cambiar-por-una-cadena-larga-y-aleatoria',
+  'cambiar-esta-clave-admin',
+  'cambiar-esta-clave',
+  'cambiar-esta-clave-root',
+];
+
+/**
+ * Revisa la configuración antes de arrancar. En producción (NODE_ENV=production,
+ * como en la imagen Docker) una clave de sesión corta o de ejemplo permitiría
+ * fabricar una cookie de administrador, así que la app se niega a arrancar.
+ * Devuelve la lista de problemas (vacía si todo está bien).
+ */
+function problemasDeConfiguracion(c = module.exports) {
+  const problemas = [];
+  const secreto = c.session.secret;
+  if (CLAVES_DE_EJEMPLO.includes(secreto) || secreto.length < 32) {
+    problemas.push('SESSION_SECRET debe ser una cadena aleatoria de al menos 32 caracteres (genere una con: openssl rand -hex 32).');
+  }
+  if (c.admin.password && CLAVES_DE_EJEMPLO.includes(c.admin.password)) {
+    problemas.push('ADMIN_PASSWORD sigue con el valor de ejemplo: cámbielo en .env.');
+  }
+  return problemas;
+}
+
 module.exports = {
   port: Number(env.PORT || 3000),
   publicUrl: (env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
@@ -26,6 +53,18 @@ module.exports = {
     secret: env.SESSION_SECRET || 'solo-desarrollo-cambiar',
     secure: env.COOKIE_SECURE === 'true',
   },
+
+  // De quién se acepta la cabecera X-Forwarded-For (la IP real del cliente).
+  // Por defecto solo de proxies en la red interna (Caddy en Docker); un cliente
+  // de Internet que llame directo a la app no puede inventarse otra IP para
+  // saltarse los límites de intentos. Valores: 'false', un número de saltos o
+  // una lista de IPs/subredes (ver "trust proxy" en la documentación de Express).
+  trustProxy: (() => {
+    const v = (env.TRUST_PROXY || '').trim();
+    if (!v) return 'loopback, linklocal, uniquelocal';
+    if (v === 'false') return false;
+    return /^\d+$/.test(v) ? Number(v) : v;
+  })(),
 
   admin: {
     nombre: env.ADMIN_NOMBRE || 'Administrador LPT',
@@ -78,3 +117,5 @@ module.exports = {
     anticipacionMaxDias: 60,
   },
 };
+
+module.exports.problemasDeConfiguracion = problemasDeConfiguracion;

@@ -23,7 +23,10 @@ aplicación crea el administrador inicial.
 ### Producción con dominio propio
 
 1. Apunte el DNS del dominio (p. ej. `impresion.ejemplo.cl`) al servidor y abra los puertos 80 y 443.
-2. En `.env` defina `DOMINIO`, `PUBLIC_URL=https://<dominio>` y `COOKIE_SECURE=true`.
+2. En `.env` defina `DOMINIO`, `PUBLIC_URL=https://<dominio>`, `COOKIE_SECURE=true` y
+   `APP_PORT=127.0.0.1:3000` (así solo Caddy llega a la app; Docker abre los puertos publicados
+   por encima del firewall). `SESSION_SECRET` debe ser aleatorio (`openssl rand -hex 32`):
+   con el valor de ejemplo la app no arranca.
 3. Levante con el proxy Caddy, que obtiene y renueva el certificado HTTPS solo:
 
 ```bash

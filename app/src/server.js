@@ -11,7 +11,7 @@ const usuarios = require('./lib/usuarios');
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', 1); // detrás de Caddy / Nginx
+app.set('trust proxy', config.trustProxy); // detrás de Caddy / Nginx
 
 app.use(
   helmet({
@@ -83,6 +83,12 @@ app.use((err, req, res, next) => {
 });
 
 async function iniciar() {
+  const problemas = config.problemasDeConfiguracion();
+  if (problemas.length) {
+    const texto = problemas.map((p) => `  - ${p}`).join('\n');
+    if (config.production) throw new Error(`Configuración insegura en .env:\n${texto}`);
+    console.warn(`Aviso de seguridad (en producción la app no arrancaría así):\n${texto}`);
+  }
   fs.mkdirSync(config.uploadDir, { recursive: true });
   await db.esperarConexion();
   await require('./lib/migraciones').migrar();

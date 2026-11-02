@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   rol             ENUM('admin', 'operador') NOT NULL DEFAULT 'operador',
   activo          TINYINT(1) NOT NULL DEFAULT 1,
   ultimo_acceso   DATETIME NULL,
+  sesion_desde    DATETIME(3) NULL,                        -- cerrar sesión invalida las cookies anteriores
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_usuarios_email (email)
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS estados_pedido (
 CREATE TABLE IF NOT EXISTS cotizaciones_pedidos (
   id                    INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   codigo                VARCHAR(20)  NOT NULL,               -- ej. LPT-2026-00042
+  acceso_token          CHAR(22)     NULL,                   -- va en el enlace del correo; exigido para subir el comprobante
   -- Cliente
   cliente_nombre        VARCHAR(120) NOT NULL,
   cliente_rut           VARCHAR(20)  NOT NULL,
@@ -182,6 +184,7 @@ CREATE TABLE IF NOT EXISTS equipos_unidades (
 CREATE TABLE IF NOT EXISTS prestamos (
   id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   codigo              VARCHAR(20)  NOT NULL,                 -- ej. PRE-2026-00007
+  acceso_token        CHAR(22)     NULL,                     -- va en el enlace del correo; exigido para cancelar
   equipo_id           INT UNSIGNED NOT NULL,
   unidad_id           INT UNSIGNED NULL,                     -- se asigna al aceptar la solicitud
   -- Solicitante (estudiante o académico UCT)

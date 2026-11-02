@@ -18,9 +18,19 @@ const limiteLogin = rateLimit({
   message: { error: 'Demasiados intentos. Espere 15 minutos.' },
 });
 
-function requiereSesion(req, res, next) {
-  if (req.session && req.session.usuario) return next();
-  res.status(401).json({ error: 'Sesión no iniciada.' });
+async function requiereSesion(req, res, next) {
+  try {
+    const u = await usuarios.sesionVigente(req.session?.usuario, req.session?.inicio);
+    if (!u) {
+      req.session = null;
+      return res.status(401).json({ error: 'Sesión no iniciada.' });
+    }
+    // Rol y nombre al día: si un admin pasa a operador, rige desde la siguiente petición
+    req.session.usuario = u;
+    next();
+  } catch (e) {
+    next(e);
+  }
 }
 
 function requiereAdmin(req, res, next) {
@@ -42,15 +52,22 @@ router.post('/login', limiteLogin, async (req, res, next) => {
     const u = await usuarios.autenticar(req.body?.email, req.body?.password);
     if (!u) return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     req.session.usuario = u;
+    req.session.inicio = Date.now();
     res.json(u);
   } catch (e) {
     next(e);
   }
 });
 
-router.post('/logout', (req, res) => {
-  req.session = null;
-  res.json({ ok: true });
+router.post('/logout', async (req, res, next) => {
+  try {
+    const id = req.session?.usuario?.id;
+    if (Number.isInteger(id)) await usuarios.cerrarSesiones(id);
+    req.session = null;
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.use(requiereSesion);

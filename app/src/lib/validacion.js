@@ -15,6 +15,15 @@ function limpiar(v, max) {
   return String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
 }
 
+/**
+ * Correo simple: letras, números y . _ % + - antes de la @, y un dominio con punto.
+ * Deja fuera comas, punto y coma, comillas y < >, que el lector de direcciones del
+ * correo podría interpretar como un segundo destinatario.
+ */
+function correoValido(email) {
+  return /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(String(email)) && String(email).length <= 160;
+}
+
 /** Valida un RUT chileno (con o sin puntos, con guion). */
 function rutValido(rut) {
   const limpio = String(rut).replace(/[.\s]/g, '').toUpperCase();
@@ -62,7 +71,7 @@ function validarCliente(body) {
   } else {
     datos.rut = formatearRut(datos.rut);
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(datos.email)) errores.email = 'Ingrese un correo válido.';
+  if (!correoValido(datos.email)) errores.email = 'Ingrese un correo válido.';
   if (!/^\+?[\d\s()-]{8,20}$/.test(datos.telefono)) errores.telefono = 'Ingrese un teléfono válido.';
   if (!reglas.metodosPago[datos.metodo_pago]) errores.metodo_pago = 'Seleccione una forma de pago.';
   if (body.acepta !== 'true' && body.acepta !== 'on') {
@@ -73,4 +82,4 @@ function validarCliente(body) {
   return datos;
 }
 
-module.exports = { ErrorValidacion, rutValido, formatearRut, validarCliente, limpiar };
+module.exports = { ErrorValidacion, correoValido, rutValido, formatearRut, validarCliente, limpiar };

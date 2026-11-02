@@ -2,7 +2,8 @@
 
 const crypto = require('crypto');
 const { query, transaccion } = require('./db');
-const { ErrorValidacion, limpiar, rutValido, formatearRut } = require('./validacion');
+const { ErrorValidacion, limpiar, rutValido, formatearRut, correoValido } = require('./validacion');
+const { nuevoTokenAcceso } = require('./acceso');
 const config = require('../config');
 const { fecha } = require('./formato');
 
@@ -81,7 +82,7 @@ function validarSolicitud(body) {
   if (d.nombre.length < 3) errores.nombre = 'Ingrese su nombre completo.';
   if (!rutValido(d.rut)) errores.rut = 'El RUT no es válido (ej. 12.345.678-5).';
   else d.rut = formatearRut(d.rut);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) errores.email = 'Ingrese un correo válido.';
+  if (!correoValido(d.email)) errores.email = 'Ingrese un correo válido.';
   else if (!correoInstitucional(d.email)) {
     errores.email = `Use su correo institucional (${config.prestamos.dominios.map((x) => '@' + x).join(' o ')}).`;
   }
@@ -193,11 +194,12 @@ async function crearSolicitud(body) {
   const id = await transaccion(async (conn) => {
     const [r] = await conn.query(
       `INSERT INTO prestamos
-        (codigo, equipo_id, solicitante_nombre, solicitante_rut, solicitante_email, solicitante_telefono,
+        (codigo, acceso_token, equipo_id, solicitante_nombre, solicitante_rut, solicitante_email, solicitante_telefono,
          solicitante_tipo, solicitante_unidad, motivo, fecha_desde, fecha_hasta, dias, tarifa_dia_clp, total_clp, garantia)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         `TMP-${crypto.randomBytes(6).toString('hex')}`,
+        nuevoTokenAcceso(),
         equipo.id, d.nombre, d.rut, d.email, d.telefono, d.tipo, d.unidad, d.motivo,
         d.desde, d.hasta, f.dias, equipo.tarifa_dia_clp, equipo.tarifa_dia_clp * f.dias, equipo.garantia,
       ]
@@ -218,13 +220,19 @@ async function cancelarPorSolicitante(p) {
   if (!['solicitado', 'aprobado'].includes(p.estado)) {
     throw errorPublico('Este préstamo ya no se puede cancelar desde aquí. Escríbanos si necesita cambiarlo.', 409);
   }
-  await registrar(p.id, 'cancelado', null, 'Cancelado por el solicitante', "estado = 'cancelado'");
+  await registrar(p.id, 'cancelado', null, 'Cancelado por el solicitante', "estado = 'cancelado'", [], p.estado);
   return obtener(p.id);
 }
 
-async function registrar(id, tipo, usuarioId, comentario, set, params = []) {
+/**
+ * Cambia el estado de un préstamo y deja el movimiento. Solo actúa si el préstamo
+ * sigue en `estadoEsperado` (el que tenía al revisarlo): si entretanto otro lo
+ * entregó o anuló, no se pisa ese cambio.
+ */
+async function registrar(id, tipo, usuarioId, comentario, set, params, estadoEsperado) {
   await transaccion(async (conn) => {
-    await conn.query(`UPDATE prestamos SET ${set} WHERE id = ?`, [...params, id]);
+    const [r] = await conn.query(`UPDATE prestamos SET ${set} WHERE id = ? AND estado = ?`, [...params, id, estadoEsperado]);
+    if (r.affectedRows === 0) throw errorPublico('El préstamo cambió mientras tanto. Recargue para ver su estado actual.', 409);
     await conn.query('INSERT INTO prestamos_movimientos (prestamo_id, tipo, usuario_id, comentario) VALUES (?, ?, ?, ?)', [
       id, tipo, usuarioId, comentario,
     ]);
@@ -326,7 +334,7 @@ async function rechazar(p, comentario, usuarioId) {
   if (!nuevo) throw errorPublico('Este préstamo ya no se puede rechazar ni anular.', 409);
   await registrar(p.id, nuevo, usuarioId, motivo, 'estado = ?, comentario_lpt = ?, revisado_por = ?, revisado_en = NOW()', [
     nuevo, motivo, usuarioId,
-  ]);
+  ], p.estado);
   return obtener(p.id);
 }
 
