@@ -115,16 +115,19 @@ legend { font-size: 1.15rem; font-weight: 700; margin-bottom: .8rem; color: var(
 .detalle dt { color: var(--tenue); }
 .detalle dd { margin: 0; }
 
-.estado { display: inline-block; padding: .2rem .7rem; border-radius: 999px; font-size: .85rem; font-weight: 700; background: var(--azul-claro); color: var(--azul-osc); white-space: nowrap; }
-.estado-pendiente { background: #fff4d6; color: #8a5a00; }
-.estado-en_impresion { background: #e3ecff; color: #1d3f9c; }
-.estado-listo { background: #dcf5e8; color: var(--ok); }
-.estado-entregado { background: #eceff3; color: #3d4654; }
-.estado-cancelado { background: #fdecea; color: var(--error); }
-.pago-sin_comprobante { background: #eceff3; color: #3d4654; }
-.pago-por_revisar { background: #fff4d6; color: #8a5a00; }
-.pago-verificado { background: #dcf5e8; color: var(--ok); }
-.pago-rechazado { background: #fdecea; color: var(--error); }
+/* Colores por estado: cada clase de estado fija un tono (--tono el color fuerte,
+   --tono-fondo el claro y --tono-texto el de la letra). Lo usan las etiquetas,
+   las tarjetas del resumen y el selector de estado del panel. */
+.tono-amarillo, .estado-pendiente, .pago-por_revisar, .prestamo-solicitado, .unidad-mantencion { --tono: #e0a800; --tono-fondo: #fff4d6; --tono-texto: #7a4f00; }
+.tono-verde, .estado-listo, .pago-verificado, .prestamo-aprobado, .unidad-disponible { --tono: #12a150; --tono-fondo: #dcf5e8; --tono-texto: #0b6b3c; }
+.tono-azul, .estado-en_impresion, .prestamo-entregado, .unidad-prestado { --tono: #2f6fe0; --tono-fondo: #e3ecff; --tono-texto: #1d3f9c; }
+.tono-gris, .estado-entregado, .pago-sin_comprobante, .prestamo-devuelto, .unidad-baja { --tono: #8a94a6; --tono-fondo: #eceff3; --tono-texto: #3d4654; }
+.tono-rojo, .estado-cancelado, .pago-rechazado, .prestamo-rechazado, .prestamo-cancelado, .prestamo-atrasado { --tono: #d92d20; --tono-fondo: #fdecea; --tono-texto: #9f1c12; }
+.estado { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .7rem; border-radius: 999px; font-size: .85rem; font-weight: 700; white-space: nowrap;
+  background: var(--tono-fondo, var(--azul-claro)); color: var(--tono-texto, var(--azul-osc)); border: 1px solid var(--tono, transparent); }
+.estado::before { content: ""; width: .55rem; height: .55rem; border-radius: 50%; background: var(--tono, currentColor); flex: none; }
+.prestamo-atrasado { background: var(--tono); color: #fff; }
+.prestamo-atrasado::before { background: #fff; }
 .pago-seguimiento { grid-column: 1 / -1; }
 .pago-seguimiento form { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end; margin-top: 1rem; }
 .pago-seguimiento .alerta { margin: 0; }
@@ -150,7 +153,17 @@ legend { font-size: 1.15rem; font-weight: 700; margin-bottom: .8rem; color: var(
 .login { max-width: 380px; margin: 4rem auto; display: grid; gap: 1rem; }
 .resumen { display: grid; grid-template-columns: repeat(5, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
 .resumen button { text-align: left; background: var(--blanco); border: 1px solid var(--borde); border-radius: var(--radio); padding: .9rem 1rem; font: inherit; cursor: pointer; }
-.resumen button[aria-pressed="true"] { border-color: var(--azul); box-shadow: 0 0 0 2px var(--azul) inset; }
+.resumen button { border-left: 6px solid var(--tono, var(--borde)); transition: background .15s, box-shadow .15s; }
+.resumen button:hover { background: var(--tono-fondo, var(--azul-claro)); }
+.resumen button[aria-pressed="true"] { background: var(--tono-fondo, var(--azul-claro)); border-color: var(--tono, var(--azul)); box-shadow: 0 0 0 2px var(--tono, var(--azul)) inset; }
+.resumen button b { color: var(--tono-texto, var(--texto)); }
+/* Selector "Nuevo estado": toma el color del estado elegido */
+.selector-estado { font-weight: 700; background-color: var(--tono-fondo, var(--blanco)); color: var(--tono-texto, var(--texto)); border: 2px solid var(--tono, var(--borde)); border-left-width: 8px; }
+.selector-estado option { font-weight: 600; background: var(--tono-fondo, var(--blanco)); color: var(--tono-texto, var(--texto)); }
+.selector-estado option:disabled { background: var(--blanco); color: var(--tenue); }
+.pago-manual { border-top: 1px solid var(--borde); padding-top: .8rem; }
+.pago-manual summary { cursor: pointer; font-weight: 700; color: var(--azul-osc); }
+.pago-manual[open] summary { margin-bottom: .8rem; }
 .resumen b { display: block; font-size: 1.6rem; }
 .filtros { display: flex; gap: .8rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .filtros input { max-width: 340px; }
@@ -174,10 +187,6 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 /* ---------- Equipos en préstamo ---------- */
-.unidad-disponible { background: #dcf5e8; color: var(--ok); }
-.unidad-prestado { background: #e3ecff; color: #1d3f9c; }
-.unidad-mantencion { background: #fff4d6; color: #8a5a00; }
-.unidad-baja { background: #eceff3; color: #3d4654; }
 .inventario-alta { margin-top: 1.5rem; }
 .fila-categoria { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .fila-categoria input[name="nombre"] { flex: 1; min-width: 160px; }
@@ -199,11 +208,6 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .etiquetas { grid-template-columns: repeat(3, 1fr); margin: 0; }
   .etiqueta { border-color: #999; }
 }
-.prestamo-solicitado { background: #fff4d6; color: #8a5a00; }
-.prestamo-aprobado { background: #dcf5e8; color: var(--ok); }
-.prestamo-entregado { background: #e3ecff; color: #1d3f9c; }
-.prestamo-devuelto { background: #eceff3; color: #3d4654; }
-.prestamo-rechazado, .prestamo-cancelado { background: #fdecea; color: var(--error); }
 .categoria { margin: 1.5rem 0 .8rem; color: var(--azul-osc); }
 .equipo { display: grid; gap: .5rem; align-content: start; }
 .equipo h4 { margin: 0; font-size: 1.1rem; }
@@ -214,7 +218,6 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .condiciones { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: .4rem; }
 .resumen-6 { grid-template-columns: repeat(6, 1fr); }
 @media (max-width: 860px) { .resumen-6 { grid-template-columns: repeat(2, 1fr); } }
-.prestamo-atrasado { background: var(--error); color: #fff; }
 .tarjeta-prestamo { margin-bottom: 1rem; border-left: 5px solid var(--azul); }
 .opciones-condicion { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0; }
 .opciones-condicion legend { width: 100%; margin-bottom: .4rem; }

@@ -164,6 +164,19 @@ router.patch('/pedidos/:id/pago', cargarPedido, async (req, res, next) => {
   }
 });
 
+router.post('/pedidos/:id/pago-manual', cargarPedido, async (req, res, next) => {
+  try {
+    const medio = limpiar(req.body?.medio, 30);
+    const nota = limpiar(req.body?.nota, 500) || null;
+    const pedido = await pedidos.validarPagoManual(req.pedido, medio, req.session.usuario.id, nota);
+    // La nota es interna: al cliente solo se le avisa que el pago quedó verificado
+    if (req.body?.notificar_cliente !== false) mailer.pagoRevisado(pedido, true, null).catch((e) => console.error(e));
+    res.json({ ok: true, pago_estado: pedido.pago_estado });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.patch('/pedidos/:id/estado', cargarPedido, async (req, res, next) => {
   try {
     const estadoId = Number(req.body?.estado_id);

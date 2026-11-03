@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS cotizaciones_pedidos (
   pago_revisado_por     INT UNSIGNED NULL,
   pago_revisado_en      DATETIME NULL,
   pago_comentario       VARCHAR(500) NULL,
+  -- Cómo se validó el pago: con el comprobante del cliente o a mano por el LPT (efectivo, transferencia...)
+  pago_medio            ENUM('comprobante', 'efectivo', 'transferencia', 'cajas_uct', 'traspaso', 'otro') NULL,
   -- Gestión
   estado_id             TINYINT UNSIGNED NOT NULL DEFAULT 1,
   notas_internas        TEXT NULL,
