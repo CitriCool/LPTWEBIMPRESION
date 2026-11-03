@@ -35,7 +35,8 @@ router.get('/catalogo', h(async (req, res) => {
 }));
 
 router.get('/disponibilidad', limiteConsultas, h(async (req, res) => {
-  const equipo = await prestamos.equipoPrestable(Number(req.query.equipo));
+  const id = Number(req.query.equipo);
+  const equipo = Number.isInteger(id) && id > 0 ? await prestamos.equipoPrestable(id) : null;
   if (!equipo) return res.status(404).json({ error: 'Ese equipo no está disponible para préstamo.' });
   const desde = String(req.query.desde || '');
   const hasta = String(req.query.hasta || '');

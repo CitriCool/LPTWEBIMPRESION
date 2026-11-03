@@ -72,7 +72,7 @@ router.post('/cotizar', limiteConsultas, async (req, res, next) => {
   try {
     const { papel, ancho_cm, alto_cm, copias } = req.body || {};
     const sp = await pedidos.obtenerPapel(papel);
-    const cot = cotizar([{ ancho_m: Number(ancho_cm) / 100, alto_m: Number(alto_cm) / 100 }], sp.precio_m2, Number(copias || 1));
+    const cot = cotizar([{ ancho_m: Number(ancho_cm) / 100, alto_m: Number(alto_cm) / 100 }], sp.precio_m2, Number(copias ?? 1));
     res.json({ ...cot, papel: sp.nombre });
   } catch (e) {
     next(e);

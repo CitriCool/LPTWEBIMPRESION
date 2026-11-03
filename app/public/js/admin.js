@@ -22,7 +22,7 @@
     otro: 'Otro',
   };
   const sinComprobante = (p) => p.pago_estado === 'verificado' && p.pago_medio && p.pago_medio !== 'comprobante';
-  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos', 'vista-prestamos', 'vista-escaner'];
+  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-cuenta', 'vista-equipos', 'vista-prestamos', 'vista-escaner'];
   let usuario = null;
   let estados = [];
   let filtroEstado = '';
@@ -334,17 +334,49 @@
   }
 
   // ---------- Usuarios ----------
-  function cargarUsuarios() {
+  async function cargarUsuarios() {
     mostrar('vista-usuarios');
     const v = $('#vista-usuarios');
-    v.innerHTML = `<h1>Nuevo usuario</h1>
-      <form class="tarjeta pila login" id="form-usuario">
+    const lista = await llamar('/admin/api/usuarios');
+    v.innerHTML = `<h1>Usuarios del panel</h1>
+      <div class="tabla-env"><table>
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${lista
+          .map(
+            (u) => `<tr>
+              <td>${esc(u.nombre)}</td><td>${esc(u.email)}</td>
+              <td>${u.rol === 'admin' ? 'Administrador' : 'Operador'}</td>
+              <td>${u.ultimo_acceso ? esc(fechaHora(u.ultimo_acceso)) : '<span class="tenue">nunca</span>'}</td>
+              <td><span class="estado ${u.activo ? 'tono-verde' : 'tono-gris'}">${u.activo ? 'Activo' : 'Desactivado'}</span></td>
+              <td>${u.id === usuario.id ? '<span class="tenue">(usted)</span>'
+                : `<button class="boton boton-claro boton-sm" type="button" data-usuario="${u.id}" data-activo="${u.activo ? 0 : 1}">${u.activo ? 'Desactivar' : 'Reactivar'}</button>`}</td>
+            </tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+      <p class="tenue">Desactivar corta de inmediato las sesiones abiertas de esa persona. Para cambiar la contraseña de otro usuario use
+        <code>docker compose exec app npm run cambiar-clave -- correo "clave-nueva"</code> en el servidor.</p>
+      <h2>Nuevo usuario</h2>
+      <form class="tarjeta pila form-angosto" id="form-usuario">
         <label>Nombre<input name="nombre" required></label>
         <label>Correo<input name="email" type="email" required></label>
         <label>Contraseña (mín. 10 caracteres)<input name="password" type="password" minlength="10" required autocomplete="new-password"></label>
         <label>Rol<select name="rol"><option value="operador">Operador (gestiona pedidos)</option><option value="admin">Administrador (también precios y usuarios)</option></select></label>
         <button class="boton" type="submit">Crear usuario</button>
       </form>`;
+    v.querySelector('tbody').addEventListener('click', async (ev) => {
+      const b = ev.target.closest('button[data-usuario]');
+      if (!b) return;
+      const activar = b.dataset.activo === '1';
+      if (!activar && !confirm('¿Desactivar este usuario? Se cerrarán sus sesiones y no podrá entrar al panel.')) return;
+      try {
+        await llamar(`/admin/api/usuarios/${b.dataset.usuario}`, { method: 'PATCH', body: { activo: activar } });
+        aviso(activar ? 'Usuario reactivado' : 'Usuario desactivado');
+        cargarUsuarios();
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
     $('#form-usuario').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.currentTarget;
@@ -355,7 +387,36 @@
           body: { nombre: f.nombre.value, email: f.email.value, password: f.password.value, rol: f.rol.value },
         });
         aviso('Usuario creado');
+        cargarUsuarios();
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
+  }
+
+  // ---------- Mi cuenta ----------
+  function cargarCuenta() {
+    mostrar('vista-cuenta');
+    const v = $('#vista-cuenta');
+    v.innerHTML = `<h1>Mi cuenta</h1>
+      <p class="tenue">${esc(usuario.nombre)} · ${esc(usuario.email)}</p>
+      <form class="tarjeta pila form-angosto" id="form-clave">
+        <h3>Cambiar contraseña</h3>
+        <label>Contraseña actual<input name="actual" type="password" required autocomplete="current-password"></label>
+        <label>Contraseña nueva (mín. 10 caracteres)<input name="nueva" type="password" minlength="10" required autocomplete="new-password"></label>
+        <label>Repita la contraseña nueva<input name="repetir" type="password" minlength="10" required autocomplete="new-password"></label>
+        <p class="tenue">Al cambiarla se cierran sus sesiones en otros equipos.</p>
+        <button class="boton" type="submit">Cambiar contraseña</button>
+      </form>`;
+    $('#form-clave').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.currentTarget;
+      if (!f.reportValidity()) return;
+      if (f.nueva.value !== f.repetir.value) return aviso('Las contraseñas nuevas no coinciden.');
+      try {
+        await llamar('/admin/api/mi-clave', { method: 'POST', body: { actual: f.actual.value, nueva: f.nueva.value } });
         f.reset();
+        aviso('Contraseña cambiada');
       } catch (e) {
         aviso(e.message);
       }
@@ -940,6 +1001,7 @@
     if ((m = /^pedido\/(\d+)$/.exec(h))) accion = cargarDetalle(m[1]);
     else if (h === 'papeles') accion = cargarPapeles();
     else if (h === 'usuarios') accion = cargarUsuarios();
+    else if (h === 'cuenta') accion = cargarCuenta();
     else if (h === 'escanear') accion = cargarEscaner();
     else if (h === 'prestamos') accion = cargarPrestamos();
     else if ((m = /^prestamo\/(\d+)$/.exec(h))) accion = cargarPrestamo(m[1]);

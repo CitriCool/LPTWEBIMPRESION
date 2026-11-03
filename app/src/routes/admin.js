@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 const pedidos = require('../lib/pedidos');
 const usuarios = require('../lib/usuarios');
 const mailer = require('../lib/mailer');
-const { limpiar } = require('../lib/validacion');
+const { limpiar, idEnRuta } = require('../lib/validacion');
 const { ErrorCotizacion } = require('../lib/cotizador');
 
 const router = express.Router();
@@ -46,6 +46,7 @@ function soloJson(req, res, next) {
 }
 
 router.use(soloJson);
+router.param('id', idEnRuta);
 
 router.post('/login', limiteLogin, async (req, res, next) => {
   try {
@@ -73,6 +74,17 @@ router.post('/logout', async (req, res, next) => {
 router.use(requiereSesion);
 
 router.get('/me', (req, res) => res.json(req.session.usuario));
+
+// Cambiar la propia contraseña: cierra las demás sesiones del usuario y mantiene esta
+router.post('/mi-clave', limiteLogin, async (req, res, next) => {
+  try {
+    const id = req.session.usuario.id;
+    req.session.inicio = await usuarios.cambiarClavePropia(id, req.body?.actual, req.body?.nueva);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.use(require('./equipos'));
 router.use(require('./prestamos-admin'));
@@ -216,6 +228,14 @@ router.put('/papeles/:id', requiereAdmin, async (req, res, next) => {
   }
 });
 
+router.get('/usuarios', requiereAdmin, async (req, res, next) => {
+  try {
+    res.json(await usuarios.listarUsuarios());
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/usuarios', requiereAdmin, async (req, res, next) => {
   try {
     const { nombre, email, password, rol } = req.body || {};
@@ -223,7 +243,16 @@ router.post('/usuarios', requiereAdmin, async (req, res, next) => {
     res.status(201).json({ ok: true });
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') e = Object.assign(new Error('Ya existe un usuario con ese correo.'), { status: 409, publico: true });
-    else if (!e.code) Object.assign(e, { status: 400, publico: true });
+    next(e);
+  }
+});
+
+// Activar / desactivar una cuenta (p. ej. alguien que deja el LPT)
+router.patch('/usuarios/:id', requiereAdmin, async (req, res, next) => {
+  try {
+    await usuarios.cambiarActivo(Number(req.params.id), req.body?.activo === true, req.session.usuario.id);
+    res.json({ ok: true });
+  } catch (e) {
     next(e);
   }
 });

@@ -151,7 +151,10 @@ legend { font-size: 1.15rem; font-weight: 700; margin-bottom: .8rem; color: var(
 /* ---------- Panel de administración ---------- */
 .admin-main { padding: 1.5rem 0 3rem; }
 .login { max-width: 380px; margin: 4rem auto; display: grid; gap: 1rem; }
-.resumen { display: grid; grid-template-columns: repeat(5, 1fr); gap: .8rem; margin-bottom: 1.2rem; }
+.form-angosto { max-width: 460px; }
+/* Tantas columnas como quepan: 6 tarjetas en pedidos y 7 en préstamos, 2 por fila en el celular */
+.resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; margin-bottom: 1.2rem; }
+.resumen .estado { white-space: normal; }
 .resumen button { text-align: left; background: var(--blanco); border: 1px solid var(--borde); border-radius: var(--radio); padding: .9rem 1rem; font: inherit; cursor: pointer; }
 .resumen button { border-left: 6px solid var(--tono, var(--borde)); transition: background .15s, box-shadow .15s; }
 .resumen button:hover { background: var(--tono-fondo, var(--azul-claro)); }
@@ -182,7 +185,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .volver { display: inline-block; margin-bottom: 1rem; }
 .aviso { position: fixed; bottom: 1rem; right: 1rem; background: var(--texto); color: var(--blanco); padding: .8rem 1.2rem; border-radius: 8px; box-shadow: var(--sombra); z-index: 20; }
 @media (max-width: 860px) {
-  .resumen { grid-template-columns: repeat(2, 1fr); }
+  .resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detalle-grid { grid-template-columns: 1fr; }
 }
 
@@ -216,12 +219,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .equipo .boton { justify-self: start; }
 .info-equipo { margin-top: .8rem; font-size: .92rem; }
 .condiciones { margin: 0 0 1rem; padding-left: 1.2rem; display: grid; gap: .4rem; }
-.resumen-6 { grid-template-columns: repeat(6, 1fr); }
-@media (max-width: 860px) { .resumen-6 { grid-template-columns: repeat(2, 1fr); } }
 .tarjeta-prestamo { margin-bottom: 1rem; border-left: 5px solid var(--azul); }
 .opciones-condicion { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0; }
 .opciones-condicion legend { width: 100%; margin-bottom: .4rem; }
 .escaner { max-width: 420px; aspect-ratio: 1; background: #000; border-radius: var(--radio); overflow: hidden; }
 .escaner video { width: 100%; height: 100%; object-fit: cover; display: block; }
-.resumen-6 { grid-template-columns: repeat(7, 1fr); }
-@media (max-width: 860px) { .resumen-6 { grid-template-columns: repeat(2, 1fr); } }
