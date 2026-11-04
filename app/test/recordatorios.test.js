@@ -58,3 +58,17 @@ test('ocupación: unidades libres por día con préstamos solapados', () => {
   // Nunca negativo si hay menos unidades operativas que préstamos (una pasó a mantención)
   assert.equal(ocupacionPorDia(prestamos, 1, '2026-11-03', 1)[0].libres, 0);
 });
+
+test('ocupación: un equipo atrasado sigue ocupando su unidad hasta hoy', () => {
+  const { finEfectivo } = require('../src/lib/prestamos');
+  const atrasado = { estado: 'entregado', unidad_id: 1, fecha_desde: '2026-10-30', fecha_hasta: '2026-11-02' };
+  assert.equal(finEfectivo(atrasado, HOY), HOY);
+  assert.equal(finEfectivo({ ...atrasado, estado: 'aprobado' }, HOY), '2026-11-02');
+  const dias = ocupacionPorDia([atrasado], 2, HOY, 2, HOY);
+  assert.deepEqual(dias.map((d) => d.libres), [1, 2]);
+});
+
+test('calendario: fechas fuera de rango vuelven a hoy', () => {
+  assert.equal(rangoCalendario('9999-12-30', 5, HOY).desde, HOY);
+  assert.equal(rangoCalendario('1900-01-01', 5, HOY).desde, HOY);
+});

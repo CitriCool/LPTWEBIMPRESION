@@ -31,6 +31,8 @@ function recordatorioQueToca(p, h = prestamos.hoy()) {
 /** Envía los recordatorios pendientes de hoy. Devuelve cuántos se enviaron. */
 async function enviarPendientes(ahora = new Date()) {
   const mailer = require('./mailer');
+  // Sin SMTP no sale nada: no se marcan como enviados para que salgan cuando se configure
+  if (!config.mail.host) return 0;
   const h = prestamos.hoy(ahora);
   const candidatos = await prestamos.paraRecordar(prestamos.sumarDias(h, 1));
   let enviados = 0;
@@ -42,8 +44,13 @@ async function enviarPendientes(ahora = new Date()) {
     // app, o si el ciclo anterior sigue corriendo, el correo no sale repetido.
     const r = await query(`UPDATE prestamos SET ${columna} = NOW() WHERE id = ? AND ${columna} IS NULL AND estado = 'entregado'`, [p.id]);
     if (r.affectedRows === 0) continue;
+    const ok = await mailer.prestamoRecordatorio(p, tipo).catch(() => false);
+    if (!ok) {
+      // Falló el envío (SMTP caído, clave vencida…): se desmarca y se reintenta en el próximo ciclo
+      await query(`UPDATE prestamos SET ${columna} = NULL WHERE id = ?`, [p.id]);
+      continue;
+    }
     await query("INSERT INTO prestamos_movimientos (prestamo_id, tipo, comentario) VALUES (?, 'recordatorio', ?)", [p.id, texto]);
-    await mailer.prestamoRecordatorio(p, tipo);
     enviados++;
   }
   return enviados;
@@ -56,6 +63,10 @@ let corriendo = false;
 function iniciar() {
   const { activos, hora } = config.prestamos.recordatorios;
   if (!activos || temporizador) return;
+  if (!config.mail.host) {
+    console.log('Recordatorios de devolución desactivados: SMTP_HOST no está configurado.');
+    return;
+  }
   const ciclo = async () => {
     if (corriendo || new Date().getHours() < hora) return;
     corriendo = true;
