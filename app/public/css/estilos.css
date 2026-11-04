@@ -224,3 +224,55 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .opciones-condicion legend { width: 100%; margin-bottom: .4rem; }
 .escaner { max-width: 420px; aspect-ratio: 1; background: #000; border-radius: var(--radio); overflow: hidden; }
 .escaner video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- Calendario de ocupación (panel) ---------- */
+.titulo-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: 1rem; }
+.titulo-acciones h1 { margin: 0; }
+.cal-nav { margin: 0; }
+.cal { table-layout: fixed; font-size: .82rem; }
+.cal .cal-col-unidad { width: 11.5rem; }
+.cal th, .cal td { padding: .3rem .2rem; text-align: center; border-left: 1px solid var(--borde); white-space: nowrap; }
+.cal thead th { text-transform: none; letter-spacing: 0; line-height: 1.15; font-size: .8rem; vertical-align: bottom; }
+.cal thead small { font-weight: 400; }
+.cal-mes { display: block; font-size: .7rem; text-transform: uppercase; color: var(--azul-osc); }
+.cal .cal-unidad { position: sticky; left: 0; z-index: 1; background: var(--blanco); text-align: left; padding-left: .7rem; overflow: hidden; text-overflow: ellipsis; }
+.cal thead .cal-unidad { background: var(--fondo); }
+.cal tbody tr { cursor: default; }
+.cal tbody tr:hover { background: none; }
+.cal-equipo th { background: var(--fondo); text-align: left; padding: .5rem .7rem; font-size: .9rem; position: sticky; left: 0; }
+.cal .cal-finde { background: #f6f7f9; }
+.cal .cal-hoy { background: var(--azul-claro); box-shadow: inset 2px 0 0 var(--azul), inset -2px 0 0 var(--azul); }
+.cal-barra { padding: .2rem .15rem; }
+.cal-barra a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: .2rem .4rem; border-radius: 6px;
+  background: var(--tono-fondo); color: var(--tono-texto); border: 1px solid var(--tono); border-left-width: 4px; text-decoration: none; font-weight: 600; }
+.cal-barra a.prestamo-atrasado { background: var(--tono); color: #fff; }
+.cal-pendiente a { border-left-width: 1px; border-style: dashed; padding: .2rem 0; text-align: center; }
+.cal-mantencion td { background: repeating-linear-gradient(135deg, #fff4d6 0 6px, #fff 6px 12px); }
+.cal-mantencion .estado { font-size: .7rem; padding: 0 .4rem; margin-left: .2rem; }
+.cal-leyenda { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+
+/* ---------- Disponibilidad por día (sitio público de préstamos) ---------- */
+.ocupacion { margin-top: 1rem; }
+.ocupacion-semana { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
+.ocupacion-semana > span { font-size: .75rem; text-align: center; color: var(--tenue); text-transform: uppercase; }
+.dia-ocupacion { font: inherit; border: 1px solid var(--tono, var(--borde)); background: var(--tono-fondo, var(--blanco)); color: var(--tono-texto, var(--texto));
+  border-radius: 8px; padding: .3rem .2rem; cursor: pointer; display: grid; line-height: 1.15; text-align: center; min-width: 0; }
+.dia-ocupacion b { font-size: 1rem; }
+.dia-ocupacion small { font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dia-ocupacion:disabled { cursor: default; opacity: .45; background: var(--blanco); border-color: var(--borde); color: var(--tenue); }
+.dia-ocupacion.elegido { box-shadow: 0 0 0 2px var(--azul); }
+.dia-ocupacion.es-hoy b { text-decoration: underline; }
+.ocupacion .cal-leyenda { margin-top: .6rem; font-size: .85rem; }
+@media (max-width: 560px) { .dia-ocupacion .sufijo { display: none; } }
+
+/* ---------- Medidas del PDF (formulario de pedido) ---------- */
+.medidas-pdf { margin-top: .8rem; display: grid; gap: .6rem; }
+.medidas-pdf .tabla-env { max-height: 320px; overflow: auto; }
+.medidas-pdf table { font-size: .88rem; }
+.medidas-pdf th, .medidas-pdf td { padding: .4rem .7rem; }
+.medidas-pdf tbody tr { cursor: default; }
+.medidas-pdf tbody tr:hover { background: none; }
+.medidas-pdf tr.excede td { background: #fdecea; color: var(--error); font-weight: 600; }
+.alerta-escala { background: var(--azul-claro); border-left: 5px solid var(--azul); margin: 0; }
+.alerta-escala p { margin: .3rem 0 0; }
+.alerta-oficina { background: var(--amarillo-claro); border-left: 5px solid var(--amarillo); margin: 0; }

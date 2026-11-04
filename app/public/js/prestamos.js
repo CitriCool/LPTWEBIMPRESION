@@ -56,6 +56,62 @@
       .join('');
   }
 
+  // ---------- Disponibilidad por día ----------
+  const DIAS_VISTA = 35; // 5 semanas
+  const lunes = (f) => sumarDias(f, -((new Date(`${f}T12:00:00Z`).getUTCDay() + 6) % 7));
+  let ocupacion = null; // { equipo, desde, dias: [...] }
+  let semanaInicial = 0;
+
+  async function cargarOcupacion() {
+    const caja = $('#ocupacion-equipo');
+    const e = equipoElegido();
+    if (!e) {
+      ocupacion = null;
+      caja.hidden = true;
+      return;
+    }
+    const desde = sumarDias(lunes(reglas.hoy), semanaInicial * 7);
+    try {
+      const r = await api(`/api/prestamos/ocupacion?${new URLSearchParams({ equipo: e.id, desde, dias: DIAS_VISTA })}`);
+      if (equipoElegido()?.id !== e.id) return; // cambió el equipo mientras tanto
+      ocupacion = { equipo: e.id, ...r };
+      pintarOcupacion();
+    } catch {
+      caja.hidden = true;
+    }
+  }
+
+  function pintarOcupacion() {
+    const caja = $('#ocupacion-equipo');
+    if (!ocupacion) return;
+    const f = $('#form-prestamo');
+    const max = sumarDias(reglas.hoy, reglas.anticipacionMaxDias);
+    const ultimaSemana = Math.floor(reglas.anticipacionMaxDias / 7);
+    const dias = ocupacion.ocupacion
+      .map(({ fecha: d, libres }) => {
+        const fuera = d < reglas.hoy || d > max;
+        const tono = libres === 0 ? 'tono-rojo' : libres < ocupacion.unidades ? 'tono-amarillo' : 'tono-verde';
+        const texto = libres === 0 ? 'Sin cupo' : `${libres} libre${libres > 1 ? 's' : ''}`;
+        // En el celular solo cabe el número
+        const corto = libres === 0 ? '0<span class="sufijo"> · sin cupo</span>' : `${libres}<span class="sufijo"> libre${libres > 1 ? 's' : ''}</span>`;
+        const elegido = f.desde.value && f.desde.value <= d && d <= (f.hasta.value || f.desde.value);
+        const n = Number(d.slice(8));
+        return `<button type="button" class="dia-ocupacion ${fuera ? '' : tono}${elegido ? ' elegido' : ''}${d === reglas.hoy ? ' es-hoy' : ''}"
+          data-fecha="${d}" ${fuera || libres === 0 ? 'disabled' : ''} title="${esc(fecha(d))}: ${fuera ? 'fuera de plazo' : texto}">
+          <b>${n}</b><small>${fuera ? '' : corto}</small></button>`;
+      })
+      .join('');
+    caja.innerHTML = `<div class="titulo-acciones">
+        <b>Disponibilidad de ${esc(equipoElegido()?.nombre || '')} · ${esc(fecha(ocupacion.desde))} al ${esc(fecha(ocupacion.hasta))}</b>
+        <span class="filtros cal-nav">
+          <button type="button" class="boton boton-claro boton-sm" data-semanas="-${DIAS_VISTA / 7}" ${semanaInicial <= 0 ? 'disabled' : ''}>← Anteriores</button>
+          <button type="button" class="boton boton-claro boton-sm" data-semanas="${DIAS_VISTA / 7}" ${semanaInicial + DIAS_VISTA / 7 > ultimaSemana ? 'disabled' : ''}>Siguientes →</button>
+        </span></div>
+      <div class="ocupacion-semana">${['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map((x) => `<span>${x}</span>`).join('')}${dias}</div>
+      <p class="cal-leyenda tenue">Toca un día para elegirlo como retiro. Las unidades libres pueden cambiar hasta que el LPT acepte tu solicitud.</p>`;
+    caja.hidden = false;
+  }
+
   // ---------- Formulario ----------
   function equipoElegido() {
     return equipos.find((e) => String(e.id) === $('#form-prestamo').equipo_id.value);
@@ -76,6 +132,7 @@
     const out = $('#resultado-prestamo');
     const e = equipoElegido();
     if (f.desde.value && !f.hasta.value) f.hasta.value = f.desde.value;
+    pintarOcupacion();
     if (!e || !f.desde.value || !f.hasta.value) {
       out.innerHTML = '<span class="tenue">Elige el equipo y las fechas para ver la disponibilidad.</span>';
       return;
@@ -147,6 +204,7 @@
     $('#nueva-solicitud').addEventListener('click', () => {
       f.reset();
       mostrarEquipo();
+      cargarOcupacion();
       revisarDisponibilidad();
       c.hidden = true;
       f.hidden = false;
@@ -221,6 +279,22 @@
     const f = $('#form-prestamo');
     f.equipo_id.addEventListener('change', () => {
       mostrarEquipo();
+      semanaInicial = 0;
+      cargarOcupacion();
+      revisarDisponibilidad();
+    });
+    $('#ocupacion-equipo').addEventListener('click', (ev) => {
+      const nav = ev.target.closest('button[data-semanas]');
+      if (nav) {
+        semanaInicial = Math.max(0, semanaInicial + Number(nav.dataset.semanas));
+        cargarOcupacion();
+        return;
+      }
+      const b = ev.target.closest('button[data-fecha]');
+      if (!b) return;
+      f.desde.value = b.dataset.fecha;
+      if (!f.hasta.value || f.hasta.value < f.desde.value) f.hasta.value = f.desde.value;
+      f.hasta.min = f.desde.value;
       revisarDisponibilidad();
     });
     f.desde.addEventListener('change', () => {
@@ -239,6 +313,8 @@
       if (!b) return;
       f.equipo_id.value = b.dataset.equipo;
       mostrarEquipo();
+      semanaInicial = 0;
+      cargarOcupacion();
       revisarDisponibilidad();
       $('#solicitar').scrollIntoView({ behavior: 'smooth' });
     });

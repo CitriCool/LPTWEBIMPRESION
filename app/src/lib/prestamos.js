@@ -417,7 +417,97 @@ async function deUnidad(unidadId) {
   };
 }
 
+// ---------- Recordatorios ----------
+/** Equipos afuera que vencen hasta `hastaFecha` (incluye los atrasados). */
+async function paraRecordar(hastaFecha) {
+  return query(`${SELECT_PRESTAMO} WHERE p.estado = 'entregado' AND p.fecha_hasta <= ? ORDER BY p.fecha_hasta, p.id`, [hastaFecha]);
+}
+
+// ---------- Calendario de ocupación ----------
+const MAX_DIAS_CALENDARIO = 62;
+
+/** Normaliza el rango pedido: desde una fecha válida (o hoy) y entre 1 y 62 días. */
+function rangoCalendario(desde, dias, h = hoy()) {
+  const d = FECHA.test(String(desde || '')) && !Number.isNaN(Date.parse(desde)) ? String(desde) : h;
+  const n = Math.min(Math.max(Number.parseInt(dias, 10) || 28, 1), MAX_DIAS_CALENDARIO);
+  return { desde: d, hasta: sumarDias(d, n - 1), dias: n };
+}
+
+function fechasDelRango(desde, dias) {
+  return Array.from({ length: dias }, (_, i) => sumarDias(desde, i));
+}
+
+/**
+ * Unidades libres de un equipo para cada día del rango, con la misma regla que
+ * disponibles(): cuentan los préstamos aceptados o entregados de unidades operativas.
+ */
+function ocupacionPorDia(prestamosEquipo, operativas, desde, dias) {
+  return fechasDelRango(desde, dias).map((fecha) => {
+    const ocupadas = new Set(
+      prestamosEquipo.filter((p) => p.fecha_desde <= fecha && p.fecha_hasta >= fecha).map((p) => p.unidad_id)
+    ).size;
+    return { fecha, libres: Math.max(0, operativas - ocupadas) };
+  });
+}
+
+/** Ocupación pública de un equipo: solo cuántas unidades quedan libres por día. */
+async function ocupacion(equipoId, desde, dias) {
+  const r = rangoCalendario(desde, dias);
+  const [operativas, filas] = await Promise.all([
+    unidadesOperativas(equipoId),
+    query(
+      `SELECT p.unidad_id, p.fecha_desde, p.fecha_hasta FROM prestamos p
+       JOIN equipos_unidades u ON u.id = p.unidad_id AND u.estado IN ('disponible', 'prestado')
+       WHERE p.equipo_id = ? AND p.estado IN ${OCUPAN} AND p.fecha_desde <= ? AND p.fecha_hasta >= ?`,
+      [equipoId, r.hasta, r.desde]
+    ),
+  ]);
+  return { ...r, unidades: operativas, ocupacion: ocupacionPorDia(filas, operativas, r.desde, r.dias) };
+}
+
+/**
+ * Calendario del panel: unidades por equipo y los préstamos que tocan el rango.
+ * Los equipos entregados y atrasados ocupan su unidad hasta que se devuelven,
+ * aunque su fecha de devolución haya quedado antes del rango.
+ */
+async function calendario(desde, dias) {
+  const r = rangoCalendario(desde, dias);
+  const [unidades, lista] = await Promise.all([
+    query(
+      `SELECT u.id, u.inventario, u.estado, e.id AS equipo_id, e.nombre AS equipo_nombre, e.marca_modelo
+       FROM equipos_unidades u JOIN equipos e ON e.id = u.equipo_id
+       WHERE e.activo = 1 AND u.estado <> 'baja'
+       ORDER BY e.nombre, e.id, u.inventario`
+    ),
+    query(
+      `SELECT p.id, p.codigo, p.estado, p.equipo_id, p.unidad_id, p.solicitante_nombre, p.fecha_desde, p.fecha_hasta
+       FROM prestamos p
+       WHERE (p.estado IN ('solicitado', 'aprobado', 'entregado') AND p.fecha_desde <= ? AND p.fecha_hasta >= ?)
+          OR (p.estado = 'entregado' AND p.fecha_hasta < ?)
+       ORDER BY p.fecha_desde, p.id`,
+      [r.hasta, r.desde, r.desde]
+    ),
+  ]);
+  const h = hoy();
+  const equipos = [];
+  for (const u of unidades) {
+    let e = equipos[equipos.length - 1];
+    if (!e || e.id !== u.equipo_id) {
+      e = { id: u.equipo_id, nombre: u.equipo_nombre, marca_modelo: u.marca_modelo, unidades: [] };
+      equipos.push(e);
+    }
+    e.unidades.push({ id: u.id, inventario: u.inventario, estado: u.estado });
+  }
+  return { ...r, hoy: h, equipos, prestamos: lista.map((p) => ({ ...p, atrasado: atrasado(p, h) })) };
+}
+
 module.exports = {
+  sumarDias,
+  paraRecordar,
+  rangoCalendario,
+  ocupacionPorDia,
+  ocupacion,
+  calendario,
   CONDICIONES,
   atrasado,
   entregableHoy,

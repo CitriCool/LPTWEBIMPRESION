@@ -14,6 +14,11 @@ const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 
 router.get('/prestamos/resumen', h(async (req, res) => res.json(await prestamos.resumen())));
 
+// Calendario de ocupación: ?desde=AAAA-MM-DD&dias=28 (máx. 62)
+router.get('/prestamos/calendario', h(async (req, res) => {
+  res.json(await prestamos.calendario(limpiar(req.query.desde, 10), req.query.dias));
+}));
+
 router.get('/prestamos', h(async (req, res) => {
   const lista = await prestamos.listar({ estado: limpiar(req.query.estado, 20) || null, q: limpiar(req.query.q, 80) || null });
   res.json(lista.map((p) => ({ ...p, atrasado: prestamos.atrasado(p) })));

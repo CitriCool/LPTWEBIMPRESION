@@ -219,6 +219,10 @@ CREATE TABLE IF NOT EXISTS prestamos (
   devuelto_por        INT UNSIGNED NULL,
   condicion_devolucion ENUM('ok', 'observaciones', 'danado') NULL,
   observacion_devolucion VARCHAR(500) NULL,
+  -- Recordatorios de devolución por correo (cuándo se envió cada uno)
+  recordatorio_previo_en DATETIME NULL,                      -- el día antes del vencimiento
+  recordatorio_vence_en  DATETIME NULL,                      -- el día del vencimiento
+  recordatorio_atraso_en DATETIME NULL,                      -- al día siguiente si no se devolvió
   creado_en           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_prestamo_codigo (codigo),

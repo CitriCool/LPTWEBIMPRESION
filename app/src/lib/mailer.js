@@ -322,6 +322,45 @@ async function prestamoEntregado(p) {
   });
 }
 
+const RECORDATORIO = {
+  previo: {
+    asunto: (p) => `Préstamo ${p.codigo}: recuerda devolverlo mañana`,
+    titulo: 'Tu préstamo vence mañana',
+    texto: (p) => `te recordamos que el equipo <b>${f.escapar(p.equipo_nombre)}</b> se devuelve mañana, <b>${f.escapar(f.fecha(p.fecha_hasta))}</b>.`,
+    color: ['#fff8db', '#f2c200'],
+  },
+  vence: {
+    asunto: (p) => `Préstamo ${p.codigo}: la devolución es hoy`,
+    titulo: 'Tu préstamo vence hoy',
+    texto: (p) => `hoy, <b>${f.escapar(f.fecha(p.fecha_hasta))}</b>, vence el préstamo del equipo <b>${f.escapar(p.equipo_nombre)}</b>.`,
+    color: ['#fff8db', '#f2c200'],
+  },
+  atraso: {
+    asunto: (p) => `Préstamo ${p.codigo}: el equipo no se ha devuelto`,
+    titulo: 'Tu préstamo está atrasado',
+    texto: (p) => `el equipo <b>${f.escapar(p.equipo_nombre)}</b> debía devolverse el <b>${f.escapar(f.fecha(p.fecha_hasta))}</b> y aún no lo recibimos.`,
+    color: ['#fdecea', '#c62828'],
+  },
+};
+
+/** Recordatorio de devolución al solicitante; el de atraso va con copia al LPT. */
+async function prestamoRecordatorio(p, tipo) {
+  const r = RECORDATORIO[tipo];
+  const lugar = p.retiro_lugar || config.prestamos.lugarRetiro;
+  await enviar({
+    to: p.solicitante_email,
+    ...(tipo === 'atraso' ? { cc: config.mail.lpt.join(',') } : {}),
+    subject: r.asunto(p),
+    html: plantilla(r.titulo, `
+      <p>Hola ${f.escapar(p.solicitante_nombre)}, ${r.texto(p)}</p>
+      <p style="background:${r.color[0]};border-left:4px solid ${r.color[1]};padding:12px"><b>Devuélvelo en:</b> ${f.escapar(lugar)}<br>
+      Con todos sus accesorios${p.accesorios ? ` (${f.escapar(p.accesorios)})` : ''}.${p.garantia_recibida && p.garantia ? ` Al devolverlo te entregamos tu garantía (${f.escapar(p.garantia)}).` : ''}</p>
+      ${tipo === 'atraso' ? '<p><b>Por favor devuélvelo lo antes posible:</b> otra persona puede tenerlo reservado. Si tuviste un problema con el equipo, responde a este correo.</p>' : '<p>Si necesitas más días, responde a este correo antes del vencimiento y lo revisamos.</p>'}
+      ${tablaPrestamo(p)}`),
+    text: `Préstamo ${p.codigo}: ${r.titulo.toLowerCase()}. Equipo ${p.equipo_nombre}, devolución ${p.fecha_hasta} en ${lugar}.`,
+  });
+}
+
 const CONDICION = { ok: 'sin observaciones', observaciones: 'con observaciones', danado: 'con daños' };
 
 /** Cierre del préstamo para el solicitante. */
@@ -350,6 +389,7 @@ module.exports = {
   prestamoCancelado,
   prestamoEntregado,
   prestamoDevuelto,
+  prestamoRecordatorio,
   instruccionesPago,
   verificar,
   enviar,

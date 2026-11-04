@@ -10,7 +10,8 @@
     "test": "node --test",
     "crear-usuario": "node scripts/crear-usuario.js",
     "cambiar-clave": "node scripts/cambiar-clave.js",
-    "probar-correo": "node scripts/probar-correo.js"
+    "probar-correo": "node scripts/probar-correo.js",
+    "recordatorios": "node scripts/enviar-recordatorios.js"
   },
   "engines": {
     "node": ">=20"

@@ -100,7 +100,7 @@
           <legend>1. Tu archivo</legend>
           <label class="zona-archivo" id="zona-archivo">
             <input type="file" name="archivo" accept="application/pdf,.pdf" required>
-            <span class="zona-texto"><b>Selecciona o arrastra tu PDF</b><br><small>Máximo <span class="js-maxmb">15</span> MB. El archivo debe tener las medidas exactas que quieres en papel (ancho máximo 1 m).</small></span>
+            <span class="zona-texto"><b>Selecciona o arrastra tu PDF</b><br><small>Máximo <span class="js-maxmb">15</span> MB. El PDF se imprime a escala 1:1: debe tener las medidas exactas que quieres en papel (ancho máximo 1 m). Al elegirlo verás las medidas de cada página.</small></span>
           </label>
           <div id="info-archivo" class="info-archivo" hidden></div>
           <div class="form-grid">
@@ -145,7 +145,7 @@
             <label class="opcion"><input type="radio" name="metodo_pago" value="cajas_uct" required> <span><b>Cajas UCT</b><small>Pagas en caja indicando el SCC <span class="js-scc">251-1148</span></small></span></label>
             <label class="opcion"><input type="radio" name="metodo_pago" value="traspaso_presupuestario"> <span><b>Traspaso presupuestario</b><small>Para unidades UCT, al SCC <span class="js-scc">251-1148</span></small></span></label>
           </div>
-          <label class="check"><input type="checkbox" name="acepta" required> Confirmo que el PDF tiene las medidas finales de impresión.</label>
+          <label class="check"><input type="checkbox" name="acepta" required> Revisé las medidas detectadas: el PDF está a escala 1:1, con el tamaño final de impresión.</label>
         </fieldset>
 
         <div id="errores-pedido" class="alerta alerta-error" role="alert" hidden></div>
@@ -181,6 +181,7 @@
 
   <script src="/vendor/pdf-lib.min.js" defer></script>
   <script src="/js/comun.js" defer></script>
+  <script src="/js/medidas.js" defer></script>
   <script src="/js/app.js" defer></script>
 </body>
 </html>

@@ -664,7 +664,7 @@
   }
 
   // ---------- Solicitudes de préstamo ----------
-  const ESTADO_PRESTAMO = { solicitado: 'Solicitado', aprobado: 'Aceptado', rechazado: 'Rechazado', cancelado: 'Cancelado', entregado: 'Entregado', devuelto: 'Devuelto', atrasado: 'Atrasado' };
+  const ESTADO_PRESTAMO = { solicitado: 'Solicitado', aprobado: 'Aceptado', rechazado: 'Rechazado', cancelado: 'Cancelado', entregado: 'Entregado', devuelto: 'Devuelto', atrasado: 'Atrasado', recordatorio: 'Recordatorio por correo' };
   const TIPO_SOLICITANTE = { estudiante: 'Estudiante', academico: 'Académico/a' };
   let filtroPrestamo = 'solicitado';
 
@@ -678,7 +678,8 @@
       llamar('/admin/api/prestamos/resumen'),
       llamar(`/admin/api/prestamos?${new URLSearchParams({ estado: filtroPrestamo, q })}`),
     ]);
-    v.innerHTML = `<h1>Préstamos de equipos</h1>
+    v.innerHTML = `<div class="titulo-acciones"><h1>Préstamos de equipos</h1>
+        <a class="boton boton-claro boton-sm" href="#calendario">Ver calendario de ocupación</a></div>
       <div class="resumen resumen-6">${resumen
         .map((e) => `<button type="button" class="prestamo-${esc(e.codigo)}" data-estado="${esc(e.codigo)}" aria-pressed="${filtroPrestamo === e.codigo}">
           <span class="estado prestamo-${esc(e.codigo)}">${esc(e.nombre)}</span><b>${e.cantidad}</b></button>`)
@@ -819,6 +820,109 @@
         cargarPrestamo(p.id);
       });
     }
+  }
+
+  // ---------- Calendario de ocupación ----------
+  const sumarDias = (f, n) => {
+    const d = new Date(`${f}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const hoyLocal = () => new Date().toLocaleDateString('sv-SE');
+  // Lunes de la semana de la fecha
+  const lunes = (f) => sumarDias(f, -((new Date(`${f}T12:00:00Z`).getUTCDay() + 6) % 7));
+  const DIA_SEMANA = ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sá'];
+  const MES = new Intl.DateTimeFormat('es-CL', { month: 'short' });
+  const DIAS_CALENDARIO = 28;
+
+  async function cargarCalendario(desdePedido) {
+    mostrar('vista-prestamos');
+    const v = $('#vista-prestamos');
+    const desde = lunes(desdePedido || hoyLocal());
+    const c = await llamar(`/admin/api/prestamos/calendario?${new URLSearchParams({ desde, dias: DIAS_CALENDARIO })}`);
+    const fechas = Array.from({ length: c.dias }, (_, i) => sumarDias(c.desde, i));
+    const claseDia = (f) => {
+      const d = new Date(`${f}T12:00:00Z`).getUTCDay();
+      return [f === c.hoy ? 'cal-hoy' : '', d === 0 || d === 6 ? 'cal-finde' : ''].filter(Boolean).join(' ');
+    };
+    const vacia = (f) => `<td class="${claseDia(f)}"></td>`;
+    // Un atrasado sigue ocupando la unidad hasta hoy
+    const fin = (p) => (p.atrasado && c.hoy > p.fecha_hasta ? c.hoy : p.fecha_hasta);
+
+    function filaUnidad(u) {
+      const suyos = c.prestamos.filter((p) => p.unidad_id === u.id);
+      let celdas = '';
+      for (let i = 0; i < fechas.length; ) {
+        const f = fechas[i];
+        const p = suyos.find((x) => x.fecha_desde <= f && fin(x) >= f);
+        if (!p) {
+          celdas += vacia(f);
+          i++;
+          continue;
+        }
+        let n = 1;
+        while (i + n < fechas.length && fin(p) >= fechas[i + n]) n++;
+        const estado = p.atrasado ? 'atrasado' : p.estado;
+        const titulo = `${p.codigo} · ${p.solicitante_nombre} · ${rangoFechas(p)} · ${ESTADO_PRESTAMO[estado]}`;
+        celdas += `<td colspan="${n}" class="cal-barra"><a class="prestamo-${esc(estado)}" href="#prestamo/${p.id}" title="${esc(titulo)}">
+          <b>${esc(p.codigo.replace(/^PRE-\d{4}-0*/, '#'))}</b> ${esc(p.solicitante_nombre)}</a></td>`;
+        i += n;
+      }
+      const mant = u.estado === 'mantencion';
+      return `<tr class="${mant ? 'cal-mantencion' : ''}"><th scope="row" class="cal-unidad"><a href="#unidad/${u.id}">${esc(u.inventario)}</a>
+        ${mant ? '<small class="estado unidad-mantencion">Mantención</small>' : ''}</th>${celdas}</tr>`;
+    }
+
+    function filaPorAsignar(e) {
+      const pend = c.prestamos.filter((p) => p.equipo_id === e.id && p.estado === 'solicitado');
+      if (!pend.length) return '';
+      const celdas = fechas
+        .map((f) => {
+          const del = pend.filter((p) => p.fecha_desde <= f && p.fecha_hasta >= f);
+          if (!del.length) return vacia(f);
+          const titulo = del.map((p) => `${p.codigo} · ${p.solicitante_nombre}`).join('\n');
+          const destino = del.length === 1 ? `#prestamo/${del[0].id}` : '#prestamos';
+          return `<td class="cal-barra cal-pendiente ${claseDia(f)}"><a class="prestamo-solicitado" href="${destino}" title="${esc(titulo)}">${del.length}</a></td>`;
+        })
+        .join('');
+      return `<tr><th scope="row" class="cal-unidad tenue">Por asignar</th>${celdas}</tr>`;
+    }
+
+    const cabecera = fechas
+      .map((f, i) => {
+        const d = new Date(`${f}T12:00:00Z`);
+        const mes = i === 0 || f.endsWith('-01') ? `<span class="cal-mes">${esc(MES.format(d).replace('.', ''))}</span>` : '';
+        return `<th class="${claseDia(f)}" scope="col">${mes}<small>${DIA_SEMANA[d.getUTCDay()]}</small><br>${d.getUTCDate()}</th>`;
+      })
+      .join('');
+    const cuerpo = c.equipos.length
+      ? c.equipos
+          .map((e) => `<tr class="cal-equipo"><th scope="rowgroup" colspan="${fechas.length + 1}"><a href="#equipo/${e.id}">${esc(e.nombre)}</a>
+              ${e.marca_modelo ? `<span class="tenue">· ${esc(e.marca_modelo)}</span>` : ''}</th></tr>
+              ${e.unidades.map(filaUnidad).join('')}${filaPorAsignar(e)}`)
+          .join('')
+      : `<tr><td colspan="${fechas.length + 1}" class="tenue">No hay equipos con unidades. Agréguelos en <a href="#equipos">Equipos</a>.</td></tr>`;
+
+    v.innerHTML = `<a href="#prestamos" class="volver">← Volver a préstamos</a>
+      <div class="titulo-acciones"><h1>Calendario de ocupación</h1>
+        <div class="filtros cal-nav">
+          <a class="boton boton-claro boton-sm" href="#calendario/${sumarDias(c.desde, -7)}">← Semana anterior</a>
+          <a class="boton boton-claro boton-sm" href="#calendario">Hoy</a>
+          <a class="boton boton-claro boton-sm" href="#calendario/${sumarDias(c.desde, 7)}">Semana siguiente →</a>
+        </div></div>
+      <p class="tenue">${esc(fecha(c.desde))} al ${esc(fecha(c.hasta))}. Clic en un préstamo para abrirlo.</p>
+      <div class="tabla-env"><table class="cal" style="width:calc(11.5rem + ${fechas.length} * 2.7rem)">
+        <colgroup><col class="cal-col-unidad">${'<col>'.repeat(fechas.length)}</colgroup>
+        <thead><tr><th class="cal-unidad">Unidad</th>${cabecera}</tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table></div>
+      <p class="cal-leyenda">
+        <span class="estado prestamo-solicitado">Solicitud por asignar (n° de solicitudes)</span>
+        <span class="estado prestamo-aprobado">Aceptado, por retirar</span>
+        <span class="estado prestamo-entregado">Entregado</span>
+        <span class="estado prestamo-atrasado">Atrasado</span>
+        <span class="estado unidad-mantencion">Unidad en mantención</span>
+      </p>`;
   }
 
   // ---------- Entrega y devolución ----------
@@ -1004,6 +1108,7 @@
     else if (h === 'cuenta') accion = cargarCuenta();
     else if (h === 'escanear') accion = cargarEscaner();
     else if (h === 'prestamos') accion = cargarPrestamos();
+    else if ((m = /^calendario(?:\/(\d{4}-\d{2}-\d{2}))?$/.exec(h))) accion = cargarCalendario(m[1]);
     else if ((m = /^prestamo\/(\d+)$/.exec(h))) accion = cargarPrestamo(m[1]);
     else if (h === 'equipos') accion = cargarEquipos();
     else if ((m = /^equipo\/(\d+)$/.exec(h))) accion = cargarEquipo(m[1]);
