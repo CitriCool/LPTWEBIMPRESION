@@ -94,16 +94,44 @@
         const c = p.getCropBox();
         return { ancho_m: Math.abs(c.width) / PUNTOS_POR_METRO, alto_m: Math.abs(c.height) / PUNTOS_POR_METRO };
       });
-      const lista = paginasPdf
-        .slice(0, 6)
-        .map((p, i) => `<li>Página ${i + 1}: ${cm(Math.min(p.ancho_m, p.alto_m))} × ${cm(Math.max(p.ancho_m, p.alto_m))} cm</li>`)
-        .join('');
-      info.innerHTML = `<b>${esc(archivo.name)}</b> · ${num(archivo.size / 1024 / 1024)} MB · ${paginasPdf.length} página(s)<ul>${lista}${paginasPdf.length > 6 ? '<li>…</li>' : ''}</ul>`;
+      info.innerHTML = `<b>${esc(archivo.name)}</b> · ${num(archivo.size / 1024 / 1024)} MB · ${paginasPdf.length} página(s)${tablaMedidas(paginasPdf)}`;
     } catch {
       info.classList.add('error');
       info.textContent = 'No pudimos leer el PDF. Verifica que no esté dañado o protegido.';
     }
     actualizarPedido();
+  }
+
+  /** Medidas detectadas de cada página, con el aviso de escala 1:1 y del ancho máximo. */
+  function tablaMedidas(paginas) {
+    const maxCm = CONFIG.reglas.anchoMaxCm;
+    const r = window.LPT_MEDIDAS.revisarPaginas(paginas, maxCm / 100);
+    const filas = r.filas
+      .map((f) => `<tr class="${f.excede ? 'excede' : ''}">
+        <td>${f.pagina}</td>
+        <td>${cm(f.ancho_m)} × ${cm(f.alto_m)} cm</td>
+        <td>${f.tamano ? esc(f.tamano) : '<span class="tenue">Personalizado</span>'}</td>
+        <td class="num">${num(f.area_m2)} m²</td>
+        <td>${f.excede ? `Supera ${maxCm} cm de ancho` : '<span class="tenue">OK</span>'}</td></tr>`)
+      .join('');
+    const tamanos = [...new Set(r.filas.map((f) => f.tamano))].join(', ');
+    return `<div class="medidas-pdf">
+      <div class="alerta alerta-escala"><b>Imprimimos tu PDF a escala 1:1, en su tamaño real.</b>
+        <p>No ampliamos ni reducimos el archivo: revisa que estas sean las medidas que quieres en papel.
+        El ancho máximo es de ${maxCm} cm (el lado menor de cada página, por el rollo de ${maxCm / 100} m); el largo puede ser mayor.</p></div>
+      ${r.todasOficina
+        ? `<div class="alerta alerta-oficina"><b>Tu PDF está en tamaño ${esc(tamanos)}.</b>
+            <p>Si es un plano o póster que quieres más grande, vuelve a exportarlo desde tu programa (ArcGIS, QGIS, AutoCAD, Illustrator…)
+            con el tamaño de hoja final. Si este es el tamaño que quieres, puedes continuar.</p></div>`
+        : ''}
+      ${r.excedidas.length
+        ? `<div class="alerta alerta-error"><b>${r.excedidas.length === 1 ? `La página ${r.excedidas[0]} supera` : `Las páginas ${r.excedidas.join(', ')} superan`} el ancho máximo de ${maxCm} cm.</b>
+            Ajusta el tamaño de hoja en tu PDF antes de enviarlo.</div>`
+        : ''}
+      <div class="tabla-env"><table>
+        <thead><tr><th>Página</th><th>Medidas</th><th>Tamaño</th><th>Superficie</th><th></th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table></div></div>`;
   }
 
   function actualizarPedido() {
@@ -148,6 +176,10 @@
     f.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
 
     if (!f.archivo.files[0]) return mostrarErrores(new Error('Adjunta el archivo PDF a imprimir.'));
+    const excedidas = paginasPdf ? window.LPT_MEDIDAS.revisarPaginas(paginasPdf, CONFIG.reglas.anchoMaxCm / 100).excedidas : [];
+    if (excedidas.length) {
+      return mostrarErrores(new Error(`El PDF tiene ${excedidas.length === 1 ? 'una página' : 'páginas'} de más de ${CONFIG.reglas.anchoMaxCm} cm de ancho (revisa la tabla de medidas).`));
+    }
     if (!f.reportValidity()) return;
 
     const datos = new FormData(f);

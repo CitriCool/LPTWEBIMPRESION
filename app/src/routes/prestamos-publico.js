@@ -45,6 +45,15 @@ router.get('/disponibilidad', limiteConsultas, h(async (req, res) => {
   res.json({ dias: f.dias, total_clp: f.dias * equipo.tarifa_dia_clp, disponibles: await prestamos.disponibles(equipo.id, desde, hasta) });
 }));
 
+// Unidades libres por día de un equipo (sin datos de quién lo tiene)
+router.get('/ocupacion', limiteConsultas, h(async (req, res) => {
+  const id = Number(req.query.equipo);
+  const equipo = Number.isInteger(id) && id > 0 ? await prestamos.equipoPrestable(id) : null;
+  if (!equipo) return res.status(404).json({ error: 'Ese equipo no está disponible para préstamo.' });
+  const r = await prestamos.ocupacion(equipo.id, String(req.query.desde || ''), req.query.dias);
+  res.json({ ...r, hoy: prestamos.hoy(), dias_max: equipo.dias_max });
+}));
+
 router.post('/', limiteSolicitudes, h(async (req, res) => {
   const p = await prestamos.crearSolicitud(req.body || {});
   mailer.prestamoRecibido(p).catch((e) => console.error(e));

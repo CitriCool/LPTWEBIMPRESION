@@ -125,6 +125,11 @@ const CAMBIOS = [
   // Pago validado sin comprobante: se guarda por qué medio se confirmó
   `ALTER TABLE cotizaciones_pedidos ADD COLUMN IF NOT EXISTS pago_medio
      ENUM('comprobante', 'efectivo', 'transferencia', 'cajas_uct', 'traspaso', 'otro') NULL AFTER pago_comentario`,
+  // Recordatorios de devolución: cuándo se envió cada uno (se envían una vez)
+  `ALTER TABLE prestamos
+     ADD COLUMN IF NOT EXISTS recordatorio_previo_en DATETIME NULL AFTER observacion_devolucion,
+     ADD COLUMN IF NOT EXISTS recordatorio_vence_en DATETIME NULL AFTER recordatorio_previo_en,
+     ADD COLUMN IF NOT EXISTS recordatorio_atraso_en DATETIME NULL AFTER recordatorio_vence_en`,
   // Categorías de partida solo si no hay ninguna (no revive las que el admin renombró)
   `INSERT INTO equipos_categorias (nombre, orden)
      SELECT * FROM (SELECT 'Notebooks', 1 UNION ALL SELECT 'Drones', 2) AS iniciales

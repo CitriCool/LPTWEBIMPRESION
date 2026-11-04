@@ -96,6 +96,7 @@ async function iniciar() {
   const errorCorreo = await require('./lib/mailer').verificar();
   console.log(errorCorreo ? `Aviso de correo: ${errorCorreo}` : `Correo SMTP listo; avisos de pedidos nuevos a ${config.mail.lpt.join(', ')}`);
   app.listen(config.port, () => console.log(`Servicio de impresión LPT escuchando en el puerto ${config.port}`));
+  require('./lib/recordatorios').iniciar();
 }
 
 if (require.main === module) {

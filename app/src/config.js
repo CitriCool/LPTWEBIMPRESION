@@ -115,6 +115,15 @@ module.exports = {
     lugarRetiro: env.PRESTAMO_LUGAR_RETIRO || 'Laboratorio de Planificación Territorial (LPT)',
     // Con cuánta anticipación se puede pedir
     anticipacionMaxDias: 60,
+    // Recordatorios de devolución por correo (día antes, día del vencimiento y atraso)
+    recordatorios: {
+      activos: env.PRESTAMO_RECORDATORIOS !== 'false',
+      // No se envían antes de esta hora (hora del servidor, TZ=America/Santiago en Docker)
+      hora: (() => {
+        const h = Number.parseInt(env.PRESTAMO_RECORDATORIO_HORA ?? '', 10);
+        return Number.isInteger(h) && h >= 0 && h <= 23 ? h : 9;
+      })(),
+    },
   },
 };
 

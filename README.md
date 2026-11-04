@@ -107,7 +107,31 @@ Cualquier operador consulta el inventario; solo un administrador lo modifica.
 4. En "Mi préstamo" (código + correo, o el enlace del correo) el solicitante ve el estado y puede
    cancelar mientras no haya retirado el equipo.
 
-Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado.
+Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado. Al elegir un equipo,
+el formulario muestra un calendario de 4 semanas con cuántas unidades quedan libres cada día
+(sin datos de quién las tiene); un clic en un día lo deja como fecha de retiro.
+
+### Calendario de ocupación (panel)
+
+En *Préstamos → Calendario* se ven todas las unidades, agrupadas por equipo, en un rango de 4 semanas
+que se mueve de a una semana. Cada préstamo es una barra con su código y solicitante, del color de su
+estado (aceptado, entregado o atrasado); un atrasado se alarga hasta hoy porque la unidad sigue afuera.
+Las solicitudes aún sin unidad asignada aparecen en una fila "Por asignar" bajo cada equipo, y las
+unidades en mantención quedan sombreadas. Un clic en la barra abre el préstamo.
+
+### Recordatorios de devolución
+
+La app revisa cada 15 minutos (desde `PRESTAMO_RECORDATORIO_HORA`, por defecto 9:00) los equipos
+entregados y envía al solicitante:
+
+- **El día antes** del vencimiento: «recuerda devolverlo mañana».
+- **El día del vencimiento**: «la devolución es hoy».
+- **Si no se devolvió**, una vez al día siguiente: aviso de atraso, con copia a `MAIL_LPT`.
+
+Cada recordatorio sale una sola vez y queda en el historial del préstamo. Si el equipo se entrega el
+mismo día en que vence (o el día antes), no se envía el recordatorio de ese día: el comprobante de
+entrega ya trae la fecha. Se desactivan con `PRESTAMO_RECORDATORIOS=false`, y
+`npm run recordatorios` los envía en el momento.
 
 ### Entrega y devolución con el QR
 
@@ -126,7 +150,7 @@ Una unidad queda ocupada en las fechas de un préstamo aceptado o entregado.
 | Paso | Qué ocurre |
 |---|---|
 | Cotizador rápido | El cliente ingresa ancho × alto en cm, papel y copias; ve el precio referencial. |
-| Envío del PDF | El navegador lee las medidas reales del PDF y muestra el precio antes de enviar. |
+| Envío del PDF | El navegador lee las medidas reales de **cada página** del PDF y las muestra en una tabla (medida en cm, tamaño de hoja reconocido, m²), con el aviso de que se imprime a escala 1:1 y la página que supera el ancho máximo marcada en rojo. Si todas las páginas son de oficina (A4, carta, oficio…) se pide confirmar que ese es el tamaño real. |
 | Recepción | El servidor **vuelve a leer el PDF** y calcula el precio definitivo; las medidas del cliente no se usan para cobrar. |
 | Confirmación | Código de pedido (`XXX-AAAA-NNNNN`), total, fecha estimada (2 días hábiles) e instrucciones de pago. |
 | Panel | Lista con filtros por estado y búsqueda, detalle, descarga del PDF, cambio de estado con comentario, notas internas e historial. |
@@ -159,13 +183,14 @@ app/
   src/lib/mailer.js      plantillas y envío de correos
   src/lib/validacion.js  datos del cliente y RUT chileno
   src/lib/equipos.js     inventario de equipos en préstamo y QR de cada unidad
-  src/lib/prestamos.js   solicitudes, disponibilidad por fechas y aprobación
+  src/lib/prestamos.js   solicitudes, disponibilidad por fechas, aprobación y calendario
+  src/lib/recordatorios.js  recordatorios de devolución por correo (cada 15 min)
   src/routes/publico.js  /api/config, /api/cotizar, /api/pedidos, /api/seguimiento
   src/routes/admin.js    /admin/api/* (login, pedidos, estados, archivo, papeles, usuarios)
   src/routes/equipos.js  /admin/api/equipos y /admin/api/unidades (inventario y etiquetas)
   src/routes/qr.js       /q/<código>, destino del QR pegado en cada equipo
-  src/routes/prestamos-publico.js  /api/prestamos (catálogo, disponibilidad, solicitud, Mi préstamo)
-  src/routes/prestamos-admin.js    /admin/api/prestamos (lista, aceptar, rechazar)
+  src/routes/prestamos-publico.js  /api/prestamos (catálogo, disponibilidad, ocupación, solicitud, Mi préstamo)
+  src/routes/prestamos-admin.js    /admin/api/prestamos (lista, calendario, aceptar, rechazar, entregar, recibir)
   public/                sitio público y panel (HTML + CSS + JS sin framework)
   test/                  pruebas del cálculo, lectura de PDF y RUT (npm test)
 ```
@@ -176,6 +201,7 @@ app/
 docker compose logs -f app                          # ver actividad y correos
 docker compose exec app npm run crear-usuario -- "Nombre" correo@ejemplo.cl "clave-de-10+" operador
 docker compose exec app npm run cambiar-clave -- correo@ejemplo.cl "clave-nueva-de-10+"   # también si se olvidó; cierra sus sesiones
+docker compose exec app npm run recordatorios       # enviar ya los recordatorios de devolución de hoy
 docker compose exec db sh -c 'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' > respaldo.sql   # respaldo de la base
 ```
 
