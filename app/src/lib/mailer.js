@@ -344,10 +344,11 @@ const RECORDATORIO = {
 };
 
 /** Recordatorio de devolución al solicitante; el de atraso va con copia al LPT. */
+/** Devuelve true solo si el correo salió de verdad (SMTP configurado y sin error). */
 async function prestamoRecordatorio(p, tipo) {
   const r = RECORDATORIO[tipo];
   const lugar = p.retiro_lugar || config.prestamos.lugarRetiro;
-  await enviar({
+  const info = await enviar({
     to: p.solicitante_email,
     ...(tipo === 'atraso' ? { cc: config.mail.lpt.join(',') } : {}),
     subject: r.asunto(p),
@@ -359,6 +360,7 @@ async function prestamoRecordatorio(p, tipo) {
       ${tablaPrestamo(p)}`),
     text: `Préstamo ${p.codigo}: ${r.titulo.toLowerCase()}. Equipo ${p.equipo_nombre}, devolución ${p.fecha_hasta} en ${lugar}.`,
   });
+  return Boolean(info && config.mail.host);
 }
 
 const CONDICION = { ok: 'sin observaciones', observaciones: 'con observaciones', danado: 'con daños' };

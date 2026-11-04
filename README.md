@@ -128,7 +128,8 @@ entregados y envía al solicitante:
 - **El día del vencimiento**: «la devolución es hoy».
 - **Si no se devolvió**, una vez al día siguiente: aviso de atraso, con copia a `MAIL_LPT`.
 
-Cada recordatorio sale una sola vez y queda en el historial del préstamo. Si el equipo se entrega el
+Cada recordatorio sale una sola vez y queda en el historial del préstamo. Necesitan SMTP: sin
+`SMTP_HOST` no se envían ni se marcan, y si el correo falla se reintenta en el siguiente ciclo. Si el equipo se entrega el
 mismo día en que vence (o el día antes), no se envía el recordatorio de ese día: el comprobante de
 entrega ya trae la fecha. Se desactivan con `PRESTAMO_RECORDATORIOS=false`, y
 `npm run recordatorios` los envía en el momento.

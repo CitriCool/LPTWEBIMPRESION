@@ -17,6 +17,11 @@ const ESTADOS = {
 };
 // Préstamos que ocupan una unidad en sus fechas
 const OCUPAN = "('aprobado', 'entregado')";
+// Hasta qué día ocupa su unidad un préstamo: un equipo entregado y atrasado la
+// sigue ocupando hasta hoy (no está en el LPT). Recibe la fecha de hoy como parámetro.
+const finOcupa = (a) => `IF(${a}.estado = 'entregado' AND ${a}.fecha_hasta < ?, ?, ${a}.fecha_hasta)`;
+/** Lo mismo en JS (p trae estado y fecha_hasta). */
+const finEfectivo = (p, h = hoy()) => (p.estado === 'entregado' && p.fecha_hasta < h ? h : p.fecha_hasta);
 const TIPOS = { estudiante: 'Estudiante', academico: 'Académico/a' };
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -109,13 +114,14 @@ async function unidadesOperativas(equipoId) {
 
 /** Cuántas unidades quedan libres en todo el rango de fechas. */
 async function disponibles(equipoId, desde, hasta) {
+  const h = hoy();
   const [operativas, [ocupadas]] = await Promise.all([
     unidadesOperativas(equipoId),
     query(
       `SELECT COUNT(DISTINCT p.unidad_id) AS n FROM prestamos p
        JOIN equipos_unidades u ON u.id = p.unidad_id AND u.estado IN ('disponible', 'prestado')
-       WHERE p.equipo_id = ? AND p.estado IN ${OCUPAN} AND p.fecha_desde <= ? AND p.fecha_hasta >= ?`,
-      [equipoId, hasta, desde]
+       WHERE p.equipo_id = ? AND p.estado IN ${OCUPAN} AND p.fecha_desde <= ? AND ${finOcupa('p')} >= ?`,
+      [equipoId, hasta, h, h, desde]
     ),
   ]);
   return Math.max(0, operativas - ocupadas.n);
@@ -127,9 +133,9 @@ async function unidadesLibres(p) {
     `SELECT u.id, u.inventario, u.estado, u.ubicacion FROM equipos_unidades u
      WHERE u.equipo_id = ? AND u.estado IN ('disponible', 'prestado')
        AND NOT EXISTS (SELECT 1 FROM prestamos o WHERE o.unidad_id = u.id AND o.id <> ?
-                       AND o.estado IN ${OCUPAN} AND o.fecha_desde <= ? AND o.fecha_hasta >= ?)
+                       AND o.estado IN ${OCUPAN} AND o.fecha_desde <= ? AND ${finOcupa('o')} >= ?)
      ORDER BY u.inventario`,
-    [p.equipo_id, p.id, p.fecha_hasta, p.fecha_desde]
+    [p.equipo_id, p.id, p.fecha_hasta, hoy(), hoy(), p.fecha_desde]
   );
 }
 
@@ -309,11 +315,14 @@ async function aprobar(id, { unidad_id, retiro_en, retiro_lugar, comentario }, u
     );
     if (!u) throw new ErrorValidacion({ unidad_id: 'Seleccione una unidad de este equipo.' });
     const [[choque]] = await conn.query(
-      `SELECT codigo FROM prestamos WHERE unidad_id = ? AND id <> ? AND estado IN ${OCUPAN}
-       AND fecha_desde <= ? AND fecha_hasta >= ? LIMIT 1`,
-      [u.id, p.id, p.fecha_hasta, p.fecha_desde]
+      `SELECT codigo, estado FROM prestamos o WHERE unidad_id = ? AND id <> ? AND estado IN ${OCUPAN}
+       AND fecha_desde <= ? AND ${finOcupa('o')} >= ? LIMIT 1`,
+      [u.id, p.id, p.fecha_hasta, hoy(), hoy(), p.fecha_desde]
     );
-    if (choque) throw errorPublico(`Esa unidad ya está comprometida en esas fechas (${choque.codigo}).`, 409);
+    if (choque) {
+      const motivo = choque.estado === 'entregado' ? 'todavía no se devuelve' : 'ya está comprometida en esas fechas';
+      throw errorPublico(`Esa unidad ${motivo} (${choque.codigo}).`, 409);
+    }
     await conn.query(
       `UPDATE prestamos SET estado = 'aprobado', unidad_id = ?, retiro_en = ?, retiro_lugar = ?, comentario_lpt = ?,
        revisado_por = ?, revisado_en = NOW() WHERE id = ?`,
@@ -428,7 +437,8 @@ const MAX_DIAS_CALENDARIO = 62;
 
 /** Normaliza el rango pedido: desde una fecha válida (o hoy) y entre 1 y 62 días. */
 function rangoCalendario(desde, dias, h = hoy()) {
-  const d = FECHA.test(String(desde || '')) && !Number.isNaN(Date.parse(desde)) ? String(desde) : h;
+  const ok = FECHA.test(String(desde || '')) && !Number.isNaN(Date.parse(desde)) && desde >= '2000-01-01' && desde <= '2999-12-31';
+  const d = ok ? String(desde) : h;
   const n = Math.min(Math.max(Number.parseInt(dias, 10) || 28, 1), MAX_DIAS_CALENDARIO);
   return { desde: d, hasta: sumarDias(d, n - 1), dias: n };
 }
@@ -441,10 +451,10 @@ function fechasDelRango(desde, dias) {
  * Unidades libres de un equipo para cada día del rango, con la misma regla que
  * disponibles(): cuentan los préstamos aceptados o entregados de unidades operativas.
  */
-function ocupacionPorDia(prestamosEquipo, operativas, desde, dias) {
+function ocupacionPorDia(prestamosEquipo, operativas, desde, dias, h = hoy()) {
   return fechasDelRango(desde, dias).map((fecha) => {
     const ocupadas = new Set(
-      prestamosEquipo.filter((p) => p.fecha_desde <= fecha && p.fecha_hasta >= fecha).map((p) => p.unidad_id)
+      prestamosEquipo.filter((p) => p.fecha_desde <= fecha && finEfectivo(p, h) >= fecha).map((p) => p.unidad_id)
     ).size;
     return { fecha, libres: Math.max(0, operativas - ocupadas) };
   });
@@ -452,17 +462,20 @@ function ocupacionPorDia(prestamosEquipo, operativas, desde, dias) {
 
 /** Ocupación pública de un equipo: solo cuántas unidades quedan libres por día. */
 async function ocupacion(equipoId, desde, dias) {
-  const r = rangoCalendario(desde, dias);
+  const h = hoy();
+  // El sitio público solo ve desde la semana pasada hasta el plazo de anticipación
+  const valida = FECHA.test(String(desde || '')) && desde >= sumarDias(h, -7) && desde <= sumarDias(h, config.prestamos.anticipacionMaxDias);
+  const r = rangoCalendario(valida ? desde : h, dias, h);
   const [operativas, filas] = await Promise.all([
     unidadesOperativas(equipoId),
     query(
-      `SELECT p.unidad_id, p.fecha_desde, p.fecha_hasta FROM prestamos p
+      `SELECT p.unidad_id, p.estado, p.fecha_desde, p.fecha_hasta FROM prestamos p
        JOIN equipos_unidades u ON u.id = p.unidad_id AND u.estado IN ('disponible', 'prestado')
-       WHERE p.equipo_id = ? AND p.estado IN ${OCUPAN} AND p.fecha_desde <= ? AND p.fecha_hasta >= ?`,
-      [equipoId, r.hasta, r.desde]
+       WHERE p.equipo_id = ? AND p.estado IN ${OCUPAN} AND p.fecha_desde <= ? AND ${finOcupa('p')} >= ?`,
+      [equipoId, r.hasta, h, h, r.desde]
     ),
   ]);
-  return { ...r, unidades: operativas, ocupacion: ocupacionPorDia(filas, operativas, r.desde, r.dias) };
+  return { ...r, unidades: operativas, ocupacion: ocupacionPorDia(filas, operativas, r.desde, r.dias, h) };
 }
 
 /**
@@ -506,6 +519,7 @@ module.exports = {
   paraRecordar,
   rangoCalendario,
   ocupacionPorDia,
+  finEfectivo,
   ocupacion,
   calendario,
   CONDICIONES,
