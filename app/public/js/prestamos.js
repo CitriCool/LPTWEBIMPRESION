@@ -59,8 +59,13 @@
   // ---------- Disponibilidad por día ----------
   const DIAS_VISTA = 35; // 5 semanas
   const lunes = (f) => sumarDias(f, -((new Date(`${f}T12:00:00Z`).getUTCDay() + 6) % 7));
+  const diasEntre = (a, b) => Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 864e5) + 1;
+  const fechaCorta = new Intl.DateTimeFormat('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
+  const corta = (d) => fechaCorta.format(new Date(`${d}T12:00:00`));
   let ocupacion = null; // { equipo, desde, dias: [...] }
   let semanaInicial = 0;
+  // Selección en dos toques: el 1.º marca el retiro y el 2.º la devolución.
+  let esperandoFin = false;
 
   async function cargarOcupacion() {
     const caja = $('#ocupacion-equipo');
@@ -81,35 +86,133 @@
     }
   }
 
+  /**
+   * Último día que se puede elegir como devolución mientras se espera el 2.º toque:
+   * respeta el plazo máximo del equipo, la anticipación máxima y se corta antes del
+   * primer día sin cupo (el préstamo debe ser continuo).
+   */
+  function limiteDevolucion(desde) {
+    const e = equipoElegido();
+    let limite = sumarDias(reglas.hoy, reglas.anticipacionMaxDias);
+    if (e?.dias_max) limite = [limite, sumarDias(desde, e.dias_max - 1)].sort()[0];
+    for (const { fecha: d, libres } of ocupacion?.ocupacion || []) {
+      if (d > desde && d <= limite && libres === 0) return sumarDias(d, -1);
+    }
+    return limite;
+  }
+
   function pintarOcupacion() {
     const caja = $('#ocupacion-equipo');
     if (!ocupacion) return;
     const f = $('#form-prestamo');
+    const e = equipoElegido();
     const max = sumarDias(reglas.hoy, reglas.anticipacionMaxDias);
     const ultimaSemana = Math.floor(reglas.anticipacionMaxDias / 7);
+    const desde = f.desde.value;
+    const hasta = f.hasta.value || desde;
+    const limite = esperandoFin && desde ? limiteDevolucion(desde) : null;
     const dias = ocupacion.ocupacion
       .map(({ fecha: d, libres }) => {
         const fuera = d < reglas.hoy || d > max;
+        const pasaLimite = limite && d > limite;
         const tono = libres === 0 ? 'tono-rojo' : libres < ocupacion.unidades ? 'tono-amarillo' : 'tono-verde';
         const texto = libres === 0 ? 'Sin cupo' : `${libres} libre${libres > 1 ? 's' : ''}`;
         // En el celular solo cabe el número
         const corto = libres === 0 ? '0<span class="sufijo"> · sin cupo</span>' : `${libres}<span class="sufijo"> libre${libres > 1 ? 's' : ''}</span>`;
-        const elegido = f.desde.value && f.desde.value <= d && d <= (f.hasta.value || f.desde.value);
-        const n = Number(d.slice(8));
-        return `<button type="button" class="dia-ocupacion ${fuera ? '' : tono}${elegido ? ' elegido' : ''}${d === reglas.hoy ? ' es-hoy' : ''}"
-          data-fecha="${d}" ${fuera || libres === 0 ? 'disabled' : ''} title="${esc(fecha(d))}: ${fuera ? 'fuera de plazo' : texto}">
-          <b>${n}</b><small>${fuera ? '' : corto}</small></button>`;
+        const clases = ['dia-ocupacion'];
+        if (!fuera) clases.push(tono);
+        if (desde && desde <= d && d <= hasta) clases.push('en-rango');
+        if (d === desde) clases.push('rango-inicio');
+        if (d === hasta && desde) clases.push('rango-fin');
+        if (d === reglas.hoy) clases.push('es-hoy');
+        if (pasaLimite) clases.push('fuera-limite');
+        const motivo = fuera ? 'fuera de plazo' : pasaLimite && libres ? `supera el plazo máximo de ${e?.dias_max} día(s) o hay un día sin cupo antes` : texto;
+        return `<button type="button" class="${clases.join(' ')}"
+          data-fecha="${d}" ${fuera || libres === 0 || pasaLimite ? 'disabled' : ''} title="${esc(fecha(d))}: ${esc(motivo)}"
+          aria-pressed="${desde && desde <= d && d <= hasta ? 'true' : 'false'}">
+          <b>${Number(d.slice(8))}</b><small>${fuera ? '' : corto}</small></button>`;
       })
       .join('');
     caja.innerHTML = `<div class="titulo-acciones">
-        <b>Disponibilidad de ${esc(equipoElegido()?.nombre || '')} · ${esc(fecha(ocupacion.desde))} al ${esc(fecha(ocupacion.hasta))}</b>
+        <b>Disponibilidad de ${esc(e?.nombre || '')} · ${esc(fecha(ocupacion.desde))} al ${esc(fecha(ocupacion.hasta))}</b>
         <span class="filtros cal-nav">
           <button type="button" class="boton boton-claro boton-sm" data-semanas="-${DIAS_VISTA / 7}" ${semanaInicial <= 0 ? 'disabled' : ''}>← Anteriores</button>
           <button type="button" class="boton boton-claro boton-sm" data-semanas="${DIAS_VISTA / 7}" ${semanaInicial + DIAS_VISTA / 7 > ultimaSemana ? 'disabled' : ''}>Siguientes →</button>
         </span></div>
+      ${resumenSeleccion()}
       <div class="ocupacion-semana">${['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map((x) => `<span>${x}</span>`).join('')}${dias}</div>
-      <p class="cal-leyenda tenue">Toca un día para elegirlo como retiro. Las unidades libres pueden cambiar hasta que el LPT acepte tu solicitud.</p>`;
+      <p class="cal-leyenda">
+        <span class="muestra tono-verde"></span> Libre
+        <span class="muestra tono-amarillo"></span> Quedan pocas
+        <span class="muestra tono-rojo"></span> Sin cupo
+        <span class="muestra muestra-elegido"></span> Tus días
+      </p>
+      <p class="tenue cal-nota">El número de cada día indica las unidades libres. Pueden cambiar hasta que el LPT acepte tu solicitud.</p>`;
     caja.hidden = false;
+  }
+
+  /** Instrucción del paso actual + resumen de los días elegidos. */
+  function resumenSeleccion() {
+    const f = $('#form-prestamo');
+    const e = equipoElegido();
+    const desde = f.desde.value;
+    const hasta = f.hasta.value || desde;
+    const plazo = e?.dias_max ? ` (máximo ${e.dias_max} día${e.dias_max > 1 ? 's' : ''})` : '';
+    const limpiar = '<button type="button" class="boton boton-claro boton-sm" data-limpiar>Limpiar</button>';
+    if (!desde) {
+      return `<div class="seleccion-dias">
+        <span class="paso">1</span>
+        <div><b>Toca el día en que retiras el equipo.</b>
+        <span class="tenue">Luego toca el día de devolución${plazo}. Si es solo un día, toca el mismo día dos veces.</span></div>
+      </div>`;
+    }
+    if (esperandoFin) {
+      return `<div class="seleccion-dias activa">
+        <span class="paso">2</span>
+        <div><b>Retiro: ${esc(corta(desde))}. Ahora toca el día de devolución${plazo}.</b>
+        <span class="tenue">Si lo necesitas solo ese día, tócalo de nuevo.</span></div>
+        ${limpiar}
+      </div>`;
+    }
+    const n = diasEntre(desde, hasta);
+    const texto = desde === hasta ? `Solo el ${esc(corta(desde))}` : `Del ${esc(corta(desde))} al ${esc(corta(hasta))}`;
+    return `<div class="seleccion-dias lista">
+      <span class="paso">✓</span>
+      <div><b>${texto} · ${n} día${n > 1 ? 's' : ''}</b>
+      <span class="tenue">Toca otro día para empezar una nueva selección.</span></div>
+      ${limpiar}
+    </div>`;
+  }
+
+  /** Vista previa del rango al pasar el mouse mientras se espera la devolución. */
+  function previsualizar(d) {
+    const f = $('#form-prestamo');
+    const desde = f.desde.value;
+    $('#ocupacion-equipo').querySelectorAll('.dia-ocupacion').forEach((b) => {
+      const x = b.dataset.fecha;
+      b.classList.toggle('previa', Boolean(esperandoFin && d && desde && d > desde && x > desde && x <= d));
+    });
+  }
+
+  function elegirDia(d) {
+    const f = $('#form-prestamo');
+    if (!esperandoFin || !f.desde.value || d < f.desde.value) {
+      f.desde.value = f.hasta.value = d;
+      esperandoFin = true;
+    } else {
+      f.hasta.value = d;
+      esperandoFin = false;
+    }
+    f.hasta.min = f.desde.value;
+    revisarDisponibilidad();
+  }
+
+  function limpiarDias() {
+    const f = $('#form-prestamo');
+    f.desde.value = f.hasta.value = '';
+    f.hasta.min = reglas.hoy;
+    esperandoFin = false;
+    revisarDisponibilidad();
   }
 
   // ---------- Formulario ----------
@@ -135,6 +238,10 @@
     pintarOcupacion();
     if (!e || !f.desde.value || !f.hasta.value) {
       out.innerHTML = '<span class="tenue">Elige el equipo y las fechas para ver la disponibilidad.</span>';
+      return;
+    }
+    if (esperandoFin) {
+      out.innerHTML = '<span class="tenue">Falta el día de devolución: tócalo en el calendario (o toca de nuevo el día de retiro si es solo uno).</span>';
       return;
     }
     try {
@@ -203,6 +310,7 @@
     c.scrollIntoView({ behavior: 'smooth', block: 'start' });
     $('#nueva-solicitud').addEventListener('click', () => {
       f.reset();
+      esperandoFin = false;
       mostrarEquipo();
       cargarOcupacion();
       revisarDisponibilidad();
@@ -290,19 +398,22 @@
         cargarOcupacion();
         return;
       }
+      if (ev.target.closest('button[data-limpiar]')) return limpiarDias();
       const b = ev.target.closest('button[data-fecha]');
-      if (!b) return;
-      f.desde.value = b.dataset.fecha;
-      if (!f.hasta.value || f.hasta.value < f.desde.value) f.hasta.value = f.desde.value;
-      f.hasta.min = f.desde.value;
-      revisarDisponibilidad();
+      if (b) elegirDia(b.dataset.fecha);
     });
+    $('#ocupacion-equipo').addEventListener('mouseover', (ev) => {
+      if (esperandoFin) previsualizar(ev.target.closest('button[data-fecha]:not(:disabled)')?.dataset.fecha);
+    });
+    $('#ocupacion-equipo').addEventListener('mouseleave', () => previsualizar(null));
     f.desde.addEventListener('change', () => {
+      esperandoFin = false;
       if (f.hasta.value && f.hasta.value < f.desde.value) f.hasta.value = f.desde.value;
       f.hasta.min = f.desde.value || reglas.hoy;
       revisarDisponibilidad();
     });
     f.hasta.addEventListener('change', () => {
+      esperandoFin = false;
       clearTimeout(temporizador);
       temporizador = setTimeout(revisarDisponibilidad, 150);
     });

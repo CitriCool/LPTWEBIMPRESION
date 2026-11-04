@@ -260,10 +260,36 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .dia-ocupacion b { font-size: 1rem; }
 .dia-ocupacion small { font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dia-ocupacion:disabled { cursor: default; opacity: .45; background: var(--blanco); border-color: var(--borde); color: var(--tenue); }
-.dia-ocupacion.elegido { box-shadow: 0 0 0 2px var(--azul); }
+.dia-ocupacion:not(:disabled):hover { box-shadow: 0 0 0 2px var(--azul-osc); }
 .dia-ocupacion.es-hoy b { text-decoration: underline; }
-.ocupacion .cal-leyenda { margin-top: .6rem; font-size: .85rem; }
-@media (max-width: 560px) { .dia-ocupacion .sufijo { display: none; } }
+/* Días elegidos: extremos en azul fuerte, días intermedios en azul claro */
+.dia-ocupacion.en-rango, .dia-ocupacion.previa { background: var(--azul-claro); border-color: var(--azul); color: var(--azul-osc); }
+.dia-ocupacion.rango-inicio, .dia-ocupacion.rango-fin { background: var(--azul); border-color: var(--azul-osc); color: #fff; }
+.dia-ocupacion.previa { border-style: dashed; }
+.dia-ocupacion.fuera-limite { opacity: .3; }
+.dia-ocupacion.tono-rojo:disabled { background: var(--tono-fondo); border-color: var(--tono); color: var(--tono-texto); opacity: .7; }
+.dia-ocupacion.tono-rojo:disabled b { text-decoration: line-through; }
+.seleccion-dias { display: flex; align-items: center; gap: .7rem; padding: .6rem .8rem; margin-bottom: .7rem; border-radius: 10px;
+  background: var(--fondo); border: 1px solid var(--borde); }
+.seleccion-dias > div { flex: 1; display: grid; gap: .1rem; }
+.seleccion-dias .tenue { font-size: .85rem; }
+.seleccion-dias .paso { flex: none; width: 1.8rem; height: 1.8rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--azul); color: #fff; font-weight: 700; }
+.seleccion-dias.activa { background: var(--amarillo-claro); border-color: var(--amarillo); }
+.seleccion-dias.lista { background: var(--azul-claro); border-color: var(--azul); }
+.seleccion-dias.lista .paso { background: var(--ok); }
+.ocupacion .cal-leyenda { margin-top: .6rem; font-size: .85rem; align-items: center; gap: .35rem .5rem; }
+.ocupacion .cal-nota { margin: .2rem 0 0; font-size: .8rem; }
+.muestra { display: inline-block; width: .9rem; height: .9rem; border-radius: 4px; border: 1px solid; vertical-align: middle; }
+.cal-leyenda .muestra:not(:first-child) { margin-left: .5rem; }
+.muestra[class*="tono-"] { background: var(--tono-fondo); border-color: var(--tono); }
+.muestra-elegido { background: var(--azul); border-color: var(--azul-osc); }
+@media (max-width: 560px) {
+  .dia-ocupacion .sufijo { display: none; }
+  .seleccion-dias { flex-wrap: wrap; }
+  .seleccion-dias > div { flex-basis: calc(100% - 2.5rem); }
+  .seleccion-dias [data-limpiar] { margin-left: 2.5rem; }
+}
 
 /* ---------- Medidas del PDF (formulario de pedido) ---------- */
 .medidas-pdf { margin-top: .8rem; display: grid; gap: .6rem; }
