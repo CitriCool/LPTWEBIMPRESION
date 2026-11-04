@@ -11,10 +11,20 @@ const config = require('../config');
 
 const SELECT_PEDIDO = `
   SELECT p.*, sp.nombre AS papel_nombre, sp.codigo AS papel_codigo,
-         e.codigo AS estado_codigo, e.nombre AS estado_nombre
+         e.codigo AS estado_codigo, e.nombre AS estado_nombre, ur.nombre AS pago_revisado_por_nombre
   FROM cotizaciones_pedidos p
   JOIN servicios_papel sp ON sp.id = p.papel_id
-  JOIN estados_pedido e ON e.id = p.estado_id`;
+  JOIN estados_pedido e ON e.id = p.estado_id
+  LEFT JOIN usuarios ur ON ur.id = p.pago_revisado_por`;
+
+/** Medios con que el LPT puede dar por pagado un pedido sin comprobante del cliente. */
+const MEDIOS_PAGO_MANUAL = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia bancaria',
+  cajas_uct: 'Cajas UCT (boleta vista en persona)',
+  traspaso: 'Traspaso presupuestario',
+  otro: 'Otro',
+};
 
 async function listarPapeles({ soloActivos = true } = {}) {
   return query(
@@ -225,7 +235,7 @@ async function guardarComprobante(pedido, archivo) {
       await conn.query(
         `UPDATE cotizaciones_pedidos SET pago_estado = 'por_revisar', comprobante_nombre = ?, comprobante_ruta = ?,
            comprobante_mime = ?, comprobante_bytes = ?, comprobante_subido_en = NOW(),
-           pago_revisado_por = NULL, pago_revisado_en = NULL, pago_comentario = NULL
+           pago_revisado_por = NULL, pago_revisado_en = NULL, pago_comentario = NULL, pago_medio = NULL
          WHERE id = ?`,
         [nombreOriginal, nombreInterno, tipo.mime, archivo.buffer.length, pedido.id]
       );
@@ -245,12 +255,14 @@ async function guardarComprobante(pedido, archivo) {
 
 async function revisarPago(pedido, verificado, usuarioId, comentario) {
   if (!verificado && !comentario) throw new ErrorCotizacion('Indique al cliente el motivo del rechazo.');
-  if (!verificado && pedido.pago_estado !== 'por_revisar') throw new ErrorCotizacion('No hay un comprobante por revisar.');
+  // Sin comprobante a la vista se usa validarPagoManual, que deja registrado el medio
+  if (pedido.pago_estado !== 'por_revisar') throw new ErrorCotizacion('No hay un comprobante por revisar.');
   await transaccion(async (conn) => {
     await conn.query(
-      `UPDATE cotizaciones_pedidos SET pago_estado = ?, pago_revisado_por = ?, pago_revisado_en = NOW(), pago_comentario = ?
+      `UPDATE cotizaciones_pedidos SET pago_estado = ?, pago_revisado_por = ?, pago_revisado_en = NOW(), pago_comentario = ?,
+         pago_medio = ?
        WHERE id = ?`,
-      [verificado ? 'verificado' : 'rechazado', usuarioId, comentario || null, pedido.id]
+      [verificado ? 'verificado' : 'rechazado', usuarioId, comentario || null, verificado ? 'comprobante' : null, pedido.id]
     );
     await conn.query(
       'INSERT INTO historial_estados (pedido_id, estado_id, usuario_id, comentario) VALUES (?, ?, ?, ?)',
@@ -259,6 +271,37 @@ async function revisarPago(pedido, verificado, usuarioId, comentario) {
         pedido.estado_id,
         usuarioId,
         verificado ? `Pago verificado${comentario ? `: ${comentario}` : ''}` : `Comprobante rechazado: ${comentario}`,
+      ]
+    );
+  });
+  return obtenerPedido(pedido.id);
+}
+
+/**
+ * El LPT confirma el pago por otra vía (efectivo, transferencia vista en la cartola...)
+ * sin que el cliente suba comprobante. Queda quién lo validó, cuándo, el medio y una nota.
+ */
+async function validarPagoManual(pedido, medio, usuarioId, nota) {
+  if (!Object.hasOwn(MEDIOS_PAGO_MANUAL, medio)) throw new ErrorCotizacion('Seleccione el medio de pago.');
+  if (medio === 'otro' && !nota) throw new ErrorCotizacion('Si el medio es "Otro", explique en la nota cómo se pagó.');
+  if (pedido.pago_estado === 'verificado') throw new ErrorCotizacion('El pago de este pedido ya fue verificado.');
+  if (pedido.estado_codigo === 'cancelado') throw new ErrorCotizacion('El pedido está cancelado.');
+  await transaccion(async (conn) => {
+    // La condición en el WHERE evita validar dos veces si dos personas lo hacen a la vez
+    const [r] = await conn.query(
+      `UPDATE cotizaciones_pedidos SET pago_estado = 'verificado', pago_medio = ?, pago_revisado_por = ?,
+         pago_revisado_en = NOW(), pago_comentario = ?
+       WHERE id = ? AND pago_estado <> 'verificado'`,
+      [medio, usuarioId, nota || null, pedido.id]
+    );
+    if (!r.affectedRows) throw new ErrorCotizacion('El pago de este pedido ya fue verificado.');
+    await conn.query(
+      'INSERT INTO historial_estados (pedido_id, estado_id, usuario_id, comentario) VALUES (?, ?, ?, ?)',
+      [
+        pedido.id,
+        pedido.estado_id,
+        usuarioId,
+        `Pago validado sin comprobante (${MEDIOS_PAGO_MANUAL[medio]})${nota ? `: ${nota}` : ''}`,
       ]
     );
   });
@@ -296,5 +339,7 @@ module.exports = {
   aceptaComprobante,
   guardarComprobante,
   revisarPago,
+  validarPagoManual,
+  MEDIOS_PAGO_MANUAL,
   actualizarPapel,
 };

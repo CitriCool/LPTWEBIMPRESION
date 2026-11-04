@@ -122,6 +122,9 @@ const CAMBIOS = [
   `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS sesion_desde DATETIME(3) NULL AFTER ultimo_acceso`,
   `ALTER TABLE cotizaciones_pedidos ADD COLUMN IF NOT EXISTS acceso_token CHAR(22) NULL AFTER codigo`,
   `ALTER TABLE prestamos ADD COLUMN IF NOT EXISTS acceso_token CHAR(22) NULL AFTER codigo`,
+  // Pago validado sin comprobante: se guarda por qué medio se confirmó
+  `ALTER TABLE cotizaciones_pedidos ADD COLUMN IF NOT EXISTS pago_medio
+     ENUM('comprobante', 'efectivo', 'transferencia', 'cajas_uct', 'traspaso', 'otro') NULL AFTER pago_comentario`,
   // Categorías de partida solo si no hay ninguna (no revive las que el admin renombró)
   `INSERT INTO equipos_categorias (nombre, orden)
      SELECT * FROM (SELECT 'Notebooks', 1 UNION ALL SELECT 'Drones', 2) AS iniciales

@@ -82,4 +82,13 @@ function validarCliente(body) {
   return datos;
 }
 
-module.exports = { ErrorValidacion, correoValido, rutValido, formatearRut, validarCliente, limpiar };
+/**
+ * Para router.param('id'): los ids de la URL son enteros positivos. Sin esto,
+ * /pedidos/abc llegaba a la base como "WHERE id = NaN" y respondía error 500.
+ */
+function idEnRuta(req, res, next, id) {
+  if (/^[1-9]\d{0,9}$/.test(id)) return next();
+  res.status(404).json({ error: 'No encontrado.' });
+}
+
+module.exports = { ErrorValidacion, idEnRuta, correoValido, rutValido, formatearRut, validarCliente, limpiar };

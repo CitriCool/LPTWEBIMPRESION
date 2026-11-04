@@ -33,6 +33,10 @@ aplicación crea el administrador inicial.
 docker compose --profile produccion up -d --build
 ```
 
+4. Entre al panel y cambie la contraseña del administrador en **Mi cuenta** (clic en su nombre,
+   arriba a la derecha). `ADMIN_PASSWORD` solo se usa para crear el primer usuario: cambiarla
+   después en `.env` no cambia la clave de nadie.
+
 Si su organización ya tiene un Nginx/Apache, omita el perfil y haga `proxy_pass` a
 `http://<servidor>:3000` (con `client_max_body_size 20m`).
 
@@ -171,10 +175,18 @@ app/
 ```bash
 docker compose logs -f app                          # ver actividad y correos
 docker compose exec app npm run crear-usuario -- "Nombre" correo@ejemplo.cl "clave-de-10+" operador
+docker compose exec app npm run cambiar-clave -- correo@ejemplo.cl "clave-nueva-de-10+"   # también si se olvidó; cierra sus sesiones
 docker compose exec db sh -c 'mariadb-dump -uroot -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' > respaldo.sql   # respaldo de la base
 ```
 
-Los PDF se guardan en el volumen `uploads`; respáldelo junto con la base.
+Los PDF y comprobantes se guardan en el volumen `uploads`; respáldelo junto con la base:
+
+```bash
+docker compose exec app tar czf - -C /data uploads > uploads.tar.gz
+```
+
+En el panel, **Usuarios** (solo administradores) lista las cuentas y permite desactivar a quien
+deja el equipo: sus sesiones se cierran al instante.
 
 ## Desarrollo sin Docker
 

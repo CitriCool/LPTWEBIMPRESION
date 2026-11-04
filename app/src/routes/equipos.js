@@ -3,10 +3,12 @@
 // Inventario de equipos para préstamo. Se monta dentro del router del panel,
 // después de exigir sesión: cualquier operador consulta, solo un admin modifica.
 const express = require('express');
+const { idEnRuta } = require('../lib/validacion');
 const equipos = require('../lib/equipos');
 const prestamos = require('../lib/prestamos');
 
 const router = express.Router();
+router.param('id', idEnRuta);
 
 function requiereAdmin(req, res, next) {
   if (req.session.usuario.rol === 'admin') return next();

@@ -12,7 +12,17 @@
     rechazado: 'Rechazado',
   };
   const ESTADOS_CON_PAGO = ['en_impresion', 'listo', 'entregado'];
-  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-equipos', 'vista-prestamos', 'vista-escaner'];
+  // Mismos códigos que MEDIOS_PAGO_MANUAL en src/lib/pedidos.js
+  const MEDIO_PAGO = {
+    comprobante: 'Comprobante del cliente',
+    efectivo: 'Efectivo',
+    transferencia: 'Transferencia bancaria',
+    cajas_uct: 'Cajas UCT (boleta vista en persona)',
+    traspaso: 'Traspaso presupuestario',
+    otro: 'Otro',
+  };
+  const sinComprobante = (p) => p.pago_estado === 'verificado' && p.pago_medio && p.pago_medio !== 'comprobante';
+  const VISTAS = ['vista-login', 'vista-lista', 'vista-detalle', 'vista-papeles', 'vista-usuarios', 'vista-cuenta', 'vista-equipos', 'vista-prestamos', 'vista-escaner'];
   let usuario = null;
   let estados = [];
   let filtroEstado = '';
@@ -76,10 +86,10 @@
     ]);
 
     $('#resumen').innerHTML =
-      `<button type="button" data-pago="por_revisar" aria-pressed="${filtroPago === 'por_revisar'}">
+      `<button type="button" class="pago-por_revisar" data-pago="por_revisar" aria-pressed="${filtroPago === 'por_revisar'}">
           <span class="estado pago-por_revisar">Pagos por revisar</span><b>${porRevisar}</b><span class="tenue">comprobantes</span></button>` +
       resumen
-        .map((e) => `<button type="button" data-estado="${esc(e.codigo)}" aria-pressed="${filtroEstado === e.codigo}">
+        .map((e) => `<button type="button" class="estado-${esc(e.codigo)}" data-estado="${esc(e.codigo)}" aria-pressed="${filtroEstado === e.codigo}">
           <span class="estado estado-${esc(e.codigo)}">${esc(e.nombre)}</span><b>${e.cantidad}</b><span class="tenue">${clp(e.monto)}</span></button>`)
         .join('');
 
@@ -92,7 +102,7 @@
             <td>${esc(p.papel_nombre)}</td>
             <td>${cm(p.ancho_m)} × ${cm(p.alto_m)} cm${p.paginas > 1 ? ` <small class="tenue">(${p.paginas} pág.)</small>` : ''}${p.copias > 1 ? ` ×${p.copias}` : ''}</td>
             <td class="num">${clp(p.total_clp)}</td>
-            <td>${PAGO[p.metodo_pago] || ''}<br><span class="estado pago-${esc(p.pago_estado)}">${ESTADO_PAGO[p.pago_estado]}</span></td>
+            <td>${PAGO[p.metodo_pago] || ''}<br><span class="estado pago-${esc(p.pago_estado)}">${ESTADO_PAGO[p.pago_estado]}</span>${sinComprobante(p) ? `<br><small class="tenue">${esc(MEDIO_PAGO[p.pago_medio])}</small>` : ''}</td>
             <td><span class="estado estado-${esc(p.estado_codigo)}">${esc(p.estado_nombre)}</span></td></tr>`)
           .join('')
       : '<tr><td colspan="8" class="tenue">No hay pedidos con este filtro.</td></tr>';
@@ -140,10 +150,10 @@
           <form class="tarjeta pila" id="form-estado">
             <h3>Cambiar estado</h3>
             <label>Nuevo estado
-              <select name="estado_id">${estados
+              <select name="estado_id" class="selector-estado estado-${esc(p.estado_codigo)}">${estados
                 .map((e) => {
                   const bloqueado = p.pago_estado !== 'verificado' && ESTADOS_CON_PAGO.includes(e.codigo) && e.codigo !== p.estado_codigo;
-                  return `<option value="${e.id}" ${e.codigo === p.estado_codigo ? 'selected' : ''} ${bloqueado ? 'disabled' : ''}>${esc(e.nombre)}${bloqueado ? ' (requiere pago verificado)' : ''}</option>`;
+                  return `<option value="${e.id}" class="estado-${esc(e.codigo)}" data-codigo="${esc(e.codigo)}" ${e.codigo === p.estado_codigo ? 'selected' : ''} ${bloqueado ? 'disabled' : ''}>${esc(e.nombre)}${bloqueado ? ' (requiere pago verificado)' : ''}</option>`;
                 })
                 .join('')}</select>
             </label>
@@ -167,6 +177,11 @@
         </div>
       </div>`;
 
+    // El selector toma el color del estado elegido
+    $('#form-estado [name="estado_id"]').addEventListener('change', (ev) => {
+      const sel = ev.currentTarget;
+      sel.className = `selector-estado estado-${sel.selectedOptions[0].dataset.codigo}`;
+    });
     $('#form-estado').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.currentTarget;
@@ -197,6 +212,29 @@
         aviso(e.message);
       }
     });
+    $('#form-pago-manual')?.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.currentTarget;
+      if (!f.medio.value) {
+        aviso('Seleccione cómo se pagó.');
+        return f.medio.focus();
+      }
+      if (f.medio.value === 'otro' && !f.nota.value.trim()) {
+        aviso('Explique en la nota cómo se pagó.');
+        return f.nota.focus();
+      }
+      if (!confirm(`¿Marcar el pedido ${p.codigo} como pagado (${MEDIO_PAGO[f.medio.value]}) sin comprobante del cliente?`)) return;
+      try {
+        await llamar(`/admin/api/pedidos/${p.id}/pago-manual`, {
+          method: 'POST',
+          body: { medio: f.medio.value, nota: f.nota.value, notificar_cliente: f.notificar_cliente.checked },
+        });
+        aviso('Pago marcado como verificado');
+        cargarDetalle(p.id);
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
     $('#form-notas').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
@@ -211,24 +249,51 @@
   function tarjetaPago(p) {
     const url = `/admin/api/pedidos/${p.id}/comprobante`;
     const vista = !p.comprobante_nombre
-      ? '<p class="tenue">El cliente aún no sube comprobante. Si el pago ya está confirmado por otra vía (p. ej. traspaso), puede verificarlo igual.</p>'
+      ? `<p class="tenue">${p.pago_estado === 'verificado' ? 'Pago validado sin comprobante del cliente.' : 'El cliente aún no sube comprobante.'}</p>`
       : `<p><a class="boton boton-sm boton-claro" href="${url}" target="_blank" rel="noopener">Abrir comprobante</a>
            <small class="tenue">${esc(p.comprobante_nombre)} · subido el ${esc(fechaHora(p.comprobante_subido_en))}</small></p>
          ${p.comprobante_mime === 'application/pdf'
            ? `<iframe class="comprobante-vista" src="${url}" title="Comprobante de pago" height="420"></iframe>`
            : `<img class="comprobante-vista" src="${url}" alt="Comprobante de pago">`}`;
-    const revisado = p.pago_revisado_en ? `<p class="tenue">Revisado el ${esc(fechaHora(p.pago_revisado_en))}${p.pago_comentario ? ` · ${esc(p.pago_comentario)}` : ''}</p>` : '';
-    const acciones =
-      p.pago_estado === 'verificado'
-        ? ''
-        : `<form class="pila" id="form-pago">
+    const revisado = p.pago_revisado_en
+      ? `<p class="tenue">${p.pago_estado === 'verificado' ? 'Validado' : 'Revisado'}${p.pago_revisado_por_nombre ? ` por ${esc(p.pago_revisado_por_nombre)}` : ''} el ${esc(fechaHora(p.pago_revisado_en))}${
+          sinComprobante(p) ? ` · <b>${esc(MEDIO_PAGO[p.pago_medio])}</b>` : ''}${p.pago_comentario ? `<br>${esc(p.pago_comentario)}` : ''}</p>`
+      : '';
+    // Con un comprobante por revisar: verificar o rechazar ese archivo
+    const revision =
+      p.pago_estado === 'por_revisar'
+        ? `<form class="pila" id="form-pago">
             <label>Comentario <small class="tenue">(obligatorio si rechaza; lo recibe el cliente)</small>
               <textarea name="comentario" rows="2" maxlength="500" placeholder="Ej.: el monto no coincide con el total del pedido"></textarea></label>
             <div class="acciones">
               <button class="boton" type="submit" value="verificar">Verificar pago</button>
-              ${p.pago_estado === 'por_revisar' ? '<button class="boton boton-peligro" type="submit" value="rechazar">Rechazar comprobante</button>' : ''}
+              <button class="boton boton-peligro" type="submit" value="rechazar">Rechazar comprobante</button>
             </div>
-          </form>`;
+          </form>`
+        : '';
+    // Pago confirmado por otra vía (efectivo, transferencia vista en la cartola...)
+    const manual =
+      p.pago_estado === 'verificado' || p.estado_codigo === 'cancelado'
+        ? ''
+        : `<details class="pago-manual" ${p.pago_estado === 'por_revisar' ? '' : 'open'}>
+            <summary>Marcar como pagado sin comprobante</summary>
+            <form class="pila" id="form-pago-manual">
+              <p class="tenue">Use esto si el pago ya se confirmó por otra vía y el cliente no necesita subir comprobante. Queda registrado quién lo validó y cuándo.</p>
+              <label>¿Cómo se pagó?
+                <select name="medio" required>
+                  <option value="">Seleccione…</option>
+                  ${Object.entries(MEDIO_PAGO)
+                    .filter(([k]) => k !== 'comprobante')
+                    .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`)
+                    .join('')}
+                </select></label>
+              <label>Nota interna <small class="tenue">(opcional; obligatoria si elige "Otro". No se envía al cliente)</small>
+                <textarea name="nota" rows="2" maxlength="500" placeholder="Ej.: pagó en efectivo a Rosa el 3/11; transferencia N° 123456"></textarea></label>
+              <label class="check"><input type="checkbox" name="notificar_cliente" checked> Avisar al cliente que su pago quedó verificado</label>
+              <button class="boton" type="submit">Marcar como pagado</button>
+            </form>
+          </details>`;
+    const acciones = revision + manual;
     return `<div class="tarjeta pila">
         <h3>Pago <span class="estado pago-${esc(p.pago_estado)}">${ESTADO_PAGO[p.pago_estado]}</span></h3>
         ${vista}${revisado}${acciones}
@@ -269,17 +334,49 @@
   }
 
   // ---------- Usuarios ----------
-  function cargarUsuarios() {
+  async function cargarUsuarios() {
     mostrar('vista-usuarios');
     const v = $('#vista-usuarios');
-    v.innerHTML = `<h1>Nuevo usuario</h1>
-      <form class="tarjeta pila login" id="form-usuario">
+    const lista = await llamar('/admin/api/usuarios');
+    v.innerHTML = `<h1>Usuarios del panel</h1>
+      <div class="tabla-env"><table>
+        <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${lista
+          .map(
+            (u) => `<tr>
+              <td>${esc(u.nombre)}</td><td>${esc(u.email)}</td>
+              <td>${u.rol === 'admin' ? 'Administrador' : 'Operador'}</td>
+              <td>${u.ultimo_acceso ? esc(fechaHora(u.ultimo_acceso)) : '<span class="tenue">nunca</span>'}</td>
+              <td><span class="estado ${u.activo ? 'tono-verde' : 'tono-gris'}">${u.activo ? 'Activo' : 'Desactivado'}</span></td>
+              <td>${u.id === usuario.id ? '<span class="tenue">(usted)</span>'
+                : `<button class="boton boton-claro boton-sm" type="button" data-usuario="${u.id}" data-activo="${u.activo ? 0 : 1}">${u.activo ? 'Desactivar' : 'Reactivar'}</button>`}</td>
+            </tr>`
+          )
+          .join('')}</tbody>
+      </table></div>
+      <p class="tenue">Desactivar corta de inmediato las sesiones abiertas de esa persona. Para cambiar la contraseña de otro usuario use
+        <code>docker compose exec app npm run cambiar-clave -- correo "clave-nueva"</code> en el servidor.</p>
+      <h2>Nuevo usuario</h2>
+      <form class="tarjeta pila form-angosto" id="form-usuario">
         <label>Nombre<input name="nombre" required></label>
         <label>Correo<input name="email" type="email" required></label>
         <label>Contraseña (mín. 10 caracteres)<input name="password" type="password" minlength="10" required autocomplete="new-password"></label>
         <label>Rol<select name="rol"><option value="operador">Operador (gestiona pedidos)</option><option value="admin">Administrador (también precios y usuarios)</option></select></label>
         <button class="boton" type="submit">Crear usuario</button>
       </form>`;
+    v.querySelector('tbody').addEventListener('click', async (ev) => {
+      const b = ev.target.closest('button[data-usuario]');
+      if (!b) return;
+      const activar = b.dataset.activo === '1';
+      if (!activar && !confirm('¿Desactivar este usuario? Se cerrarán sus sesiones y no podrá entrar al panel.')) return;
+      try {
+        await llamar(`/admin/api/usuarios/${b.dataset.usuario}`, { method: 'PATCH', body: { activo: activar } });
+        aviso(activar ? 'Usuario reactivado' : 'Usuario desactivado');
+        cargarUsuarios();
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
     $('#form-usuario').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const f = ev.currentTarget;
@@ -290,7 +387,36 @@
           body: { nombre: f.nombre.value, email: f.email.value, password: f.password.value, rol: f.rol.value },
         });
         aviso('Usuario creado');
+        cargarUsuarios();
+      } catch (e) {
+        aviso(e.message);
+      }
+    });
+  }
+
+  // ---------- Mi cuenta ----------
+  function cargarCuenta() {
+    mostrar('vista-cuenta');
+    const v = $('#vista-cuenta');
+    v.innerHTML = `<h1>Mi cuenta</h1>
+      <p class="tenue">${esc(usuario.nombre)} · ${esc(usuario.email)}</p>
+      <form class="tarjeta pila form-angosto" id="form-clave">
+        <h3>Cambiar contraseña</h3>
+        <label>Contraseña actual<input name="actual" type="password" required autocomplete="current-password"></label>
+        <label>Contraseña nueva (mín. 10 caracteres)<input name="nueva" type="password" minlength="10" required autocomplete="new-password"></label>
+        <label>Repita la contraseña nueva<input name="repetir" type="password" minlength="10" required autocomplete="new-password"></label>
+        <p class="tenue">Al cambiarla se cierran sus sesiones en otros equipos.</p>
+        <button class="boton" type="submit">Cambiar contraseña</button>
+      </form>`;
+    $('#form-clave').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.currentTarget;
+      if (!f.reportValidity()) return;
+      if (f.nueva.value !== f.repetir.value) return aviso('Las contraseñas nuevas no coinciden.');
+      try {
+        await llamar('/admin/api/mi-clave', { method: 'POST', body: { actual: f.actual.value, nueva: f.nueva.value } });
         f.reset();
+        aviso('Contraseña cambiada');
       } catch (e) {
         aviso(e.message);
       }
@@ -554,7 +680,7 @@
     ]);
     v.innerHTML = `<h1>Préstamos de equipos</h1>
       <div class="resumen resumen-6">${resumen
-        .map((e) => `<button type="button" data-estado="${esc(e.codigo)}" aria-pressed="${filtroPrestamo === e.codigo}">
+        .map((e) => `<button type="button" class="prestamo-${esc(e.codigo)}" data-estado="${esc(e.codigo)}" aria-pressed="${filtroPrestamo === e.codigo}">
           <span class="estado prestamo-${esc(e.codigo)}">${esc(e.nombre)}</span><b>${e.cantidad}</b></button>`)
         .join('')}</div>
       <div class="filtros">
@@ -875,6 +1001,7 @@
     if ((m = /^pedido\/(\d+)$/.exec(h))) accion = cargarDetalle(m[1]);
     else if (h === 'papeles') accion = cargarPapeles();
     else if (h === 'usuarios') accion = cargarUsuarios();
+    else if (h === 'cuenta') accion = cargarCuenta();
     else if (h === 'escanear') accion = cargarEscaner();
     else if (h === 'prestamos') accion = cargarPrestamos();
     else if ((m = /^prestamo\/(\d+)$/.exec(h))) accion = cargarPrestamo(m[1]);

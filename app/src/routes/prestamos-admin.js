@@ -5,9 +5,10 @@ const express = require('express');
 const config = require('../config');
 const prestamos = require('../lib/prestamos');
 const mailer = require('../lib/mailer');
-const { limpiar } = require('../lib/validacion');
+const { limpiar, idEnRuta } = require('../lib/validacion');
 
 const router = express.Router();
+router.param('id', idEnRuta);
 
 const h = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 
