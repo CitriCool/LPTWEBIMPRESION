@@ -64,8 +64,11 @@
   const corta = (d) => fechaCorta.format(new Date(`${d}T12:00:00`));
   let ocupacion = null; // { equipo, desde, dias: [...] }
   let semanaInicial = 0;
-  // Selección en dos toques: el 1.º marca el retiro y el 2.º la devolución.
+  // Modo «uno» (un solo día) o «varios»: en «varios» el 1.er toque marca el retiro
+  // y el 2.º la devolución.
+  let modo = 'uno';
   let esperandoFin = false;
+  const permiteVarios = () => (equipoElegido()?.dias_max || 2) > 1;
 
   async function cargarOcupacion() {
     const caja = $('#ocupacion-equipo');
@@ -139,6 +142,7 @@
           <button type="button" class="boton boton-claro boton-sm" data-semanas="-${DIAS_VISTA / 7}" ${semanaInicial <= 0 ? 'disabled' : ''}>← Anteriores</button>
           <button type="button" class="boton boton-claro boton-sm" data-semanas="${DIAS_VISTA / 7}" ${semanaInicial + DIAS_VISTA / 7 > ultimaSemana ? 'disabled' : ''}>Siguientes →</button>
         </span></div>
+      ${selectorModo()}
       ${resumenSeleccion()}
       <div class="ocupacion-semana">${['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map((x) => `<span>${x}</span>`).join('')}${dias}</div>
       <p class="cal-leyenda">
@@ -151,6 +155,20 @@
     caja.hidden = false;
   }
 
+  /** Dos opciones: un día o varios días. */
+  function selectorModo() {
+    const e = equipoElegido();
+    const varios = permiteVarios();
+    const opcion = (valor, titulo, detalle, deshabilitada) => `<button type="button" class="modo-opcion${modo === valor ? ' activo' : ''}"
+        data-modo="${valor}" role="radio" aria-checked="${modo === valor}" ${deshabilitada ? 'disabled' : ''}>
+        <span class="modo-marca" aria-hidden="true"></span>
+        <span><b>${titulo}</b><small>${detalle}</small></span></button>`;
+    return `<div class="modo-dias" role="radiogroup" aria-label="¿Cuántos días necesitas el equipo?">
+      ${opcion('uno', 'Un día', 'Lo retiras y devuelves el mismo día')}
+      ${opcion('varios', 'Varios días', varios ? `Eliges retiro y devolución (máx. ${e?.dias_max} días)` : 'Este equipo se presta por un solo día', !varios)}
+    </div>`;
+  }
+
   /** Instrucción del paso actual + resumen de los días elegidos. */
   function resumenSeleccion() {
     const f = $('#form-prestamo');
@@ -159,18 +177,33 @@
     const hasta = f.hasta.value || desde;
     const plazo = e?.dias_max ? ` (máximo ${e.dias_max} día${e.dias_max > 1 ? 's' : ''})` : '';
     const limpiar = '<button type="button" class="boton boton-claro boton-sm" data-limpiar>Limpiar</button>';
+    if (modo === 'uno') {
+      if (!desde) {
+        return `<div class="seleccion-dias">
+          <span class="paso">1</span>
+          <div><b>Toca el día en que necesitas el equipo.</b>
+          <span class="tenue">¿Lo necesitas más de un día? Elige «Varios días» arriba.</span></div>
+        </div>`;
+      }
+      return `<div class="seleccion-dias lista">
+        <span class="paso">✓</span>
+        <div><b>${esc(corta(desde))} · 1 día</b>
+        <span class="tenue">Toca otro día para cambiarlo.</span></div>
+        ${limpiar}
+      </div>`;
+    }
     if (!desde) {
       return `<div class="seleccion-dias">
         <span class="paso">1</span>
         <div><b>Toca el día en que retiras el equipo.</b>
-        <span class="tenue">Luego toca el día de devolución${plazo}. Si es solo un día, toca el mismo día dos veces.</span></div>
+        <span class="tenue">Luego toca el día de devolución${plazo}.</span></div>
       </div>`;
     }
     if (esperandoFin) {
       return `<div class="seleccion-dias activa">
         <span class="paso">2</span>
         <div><b>Retiro: ${esc(corta(desde))}. Ahora toca el día de devolución${plazo}.</b>
-        <span class="tenue">Si lo necesitas solo ese día, tócalo de nuevo.</span></div>
+        <span class="tenue">Puedes tocar días hasta el ${esc(corta(limiteDevolucion(desde)))}.</span></div>
         ${limpiar}
       </div>`;
     }
@@ -196,7 +229,10 @@
 
   function elegirDia(d) {
     const f = $('#form-prestamo');
-    if (!esperandoFin || !f.desde.value || d < f.desde.value) {
+    if (modo === 'uno') {
+      f.desde.value = f.hasta.value = d;
+      esperandoFin = false;
+    } else if (!esperandoFin || !f.desde.value || d < f.desde.value) {
       f.desde.value = f.hasta.value = d;
       esperandoFin = true;
     } else {
@@ -204,6 +240,20 @@
       esperandoFin = false;
     }
     f.hasta.min = f.desde.value;
+    revisarDisponibilidad();
+  }
+
+  function cambiarModo(nuevo) {
+    const f = $('#form-prestamo');
+    if (nuevo === 'varios' && !permiteVarios()) nuevo = 'uno';
+    modo = nuevo;
+    if (modo === 'uno') {
+      if (f.desde.value) f.hasta.value = f.desde.value;
+      esperandoFin = false;
+    } else {
+      // Con el retiro ya elegido, el próximo toque es la devolución
+      esperandoFin = Boolean(f.desde.value);
+    }
     revisarDisponibilidad();
   }
 
@@ -311,6 +361,7 @@
     $('#nueva-solicitud').addEventListener('click', () => {
       f.reset();
       esperandoFin = false;
+      modo = 'uno';
       mostrarEquipo();
       cargarOcupacion();
       revisarDisponibilidad();
@@ -387,6 +438,7 @@
     const f = $('#form-prestamo');
     f.equipo_id.addEventListener('change', () => {
       mostrarEquipo();
+      if (!permiteVarios()) cambiarModo('uno');
       semanaInicial = 0;
       cargarOcupacion();
       revisarDisponibilidad();
@@ -399,6 +451,8 @@
         return;
       }
       if (ev.target.closest('button[data-limpiar]')) return limpiarDias();
+      const m = ev.target.closest('button[data-modo]');
+      if (m) return cambiarModo(m.dataset.modo);
       const b = ev.target.closest('button[data-fecha]');
       if (b) elegirDia(b.dataset.fecha);
     });
@@ -414,6 +468,7 @@
     });
     f.hasta.addEventListener('change', () => {
       esperandoFin = false;
+      if (f.hasta.value && f.hasta.value !== f.desde.value && permiteVarios()) modo = 'varios';
       clearTimeout(temporizador);
       temporizador = setTimeout(revisarDisponibilidad, 150);
     });
@@ -424,6 +479,7 @@
       if (!b) return;
       f.equipo_id.value = b.dataset.equipo;
       mostrarEquipo();
+      if (!permiteVarios()) cambiarModo('uno');
       semanaInicial = 0;
       cargarOcupacion();
       revisarDisponibilidad();
