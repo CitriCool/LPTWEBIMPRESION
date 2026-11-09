@@ -6,6 +6,12 @@ const express = require('express');
 const { idEnRuta } = require('../lib/validacion');
 const equipos = require('../lib/equipos');
 const prestamos = require('../lib/prestamos');
+const importacion = require('../lib/importar-equipos');
+
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+// La planilla llega como el cuerpo de la petición (sin multipart): ese tipo de
+// contenido no lo puede enviar un formulario de otro sitio, así se mantiene la protección CSRF
+const cuerpoXlsx = express.raw({ type: XLSX, limit: '5mb' });
 
 const router = express.Router();
 router.param('id', idEnRuta);
@@ -33,6 +39,49 @@ router.get('/equipos', h(async (req, res) => res.json(await equipos.listarEquipo
 
 router.post('/equipos', requiereAdmin, h(async (req, res) => {
   res.status(201).json({ id: await equipos.crearEquipo(req.body || {}) });
+}));
+
+// Importar dispositivos desde la planilla Excel: primero se revisa, luego se guarda
+function planilla(req, res, next) {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) {
+    return res.status(400).json({ error: 'Seleccione la planilla Excel (.xlsx) con los dispositivos.' });
+  }
+  next();
+}
+
+router.post('/equipos/importar/revisar', requiereAdmin, cuerpoXlsx, planilla, h(async (req, res) => {
+  res.json(await importacion.revisar(req.body));
+}));
+
+router.post('/equipos/importar', requiereAdmin, cuerpoXlsx, planilla, h(async (req, res) => {
+  try {
+    res.status(201).json(await importacion.importar(req.body));
+  } catch (e) {
+    if (!e.revision) throw e;
+    res.status(409).json({ error: e.message, revision: e.revision });
+  }
+}));
+
+function enviarPdf(res, pdf, nombre) {
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="${nombre}"`,
+    'Cache-Control': 'no-store',
+  });
+  res.send(pdf);
+}
+
+// PDF con las etiquetas de varias unidades (p. ej. las recién importadas): ?ids=1,2,3
+router.get('/unidades/etiquetas.pdf', h(async (req, res) => {
+  const ids = [...new Set(String(req.query.ids || '').split(',').filter((x) => /^[1-9]\d{0,9}$/.test(x)).map(Number))];
+  if (!ids.length || ids.length > importacion.MAX_DISPOSITIVOS) {
+    return res.status(400).json({ error: 'Indique las unidades a imprimir.' });
+  }
+  enviarPdf(res, await equipos.etiquetasPdf({ unidadIds: ids }), 'etiquetas-qr.pdf');
+}));
+
+router.get('/equipos/:id/etiquetas.pdf', h(async (req, res) => {
+  enviarPdf(res, await equipos.etiquetasPdf({ equipoId: Number(req.params.id) }), `etiquetas-qr-equipo-${req.params.id}.pdf`);
 }));
 
 router.get('/equipos/:id', h(async (req, res) => {
@@ -94,3 +143,4 @@ router.get('/unidades/:id/etiqueta', cargarUnidad, h(async (req, res) => {
 }));
 
 module.exports = router;
+module.exports.XLSX = XLSX;

@@ -234,22 +234,36 @@ async function renovarQr(id) {
   await query('UPDATE equipos_unidades SET qr_token = ? WHERE id = ?', [nuevoToken(), id]);
 }
 
-/** Datos para imprimir etiquetas: de un equipo completo o de unidades sueltas. */
-async function etiquetas({ equipoId, unidadId }) {
-  const filas = await query(
+/** Unidades para imprimir etiquetas: de un equipo completo, de una unidad o de una lista de unidades. */
+async function filasEtiquetas({ equipoId, unidadId, unidadIds }) {
+  if (unidadIds) {
+    if (!unidadIds.length) return [];
+    return query(`${SELECT_UNIDAD} WHERE u.id IN (?) ORDER BY e.nombre, u.inventario`, [unidadIds]);
+  }
+  return query(
     `${SELECT_UNIDAD} WHERE ${equipoId ? 'u.equipo_id = ? AND u.estado <> \'baja\'' : 'u.id = ?'} ORDER BY u.inventario`,
     [equipoId || unidadId]
   );
-  return Promise.all(
-    filas.map(async (u) => ({
-      id: u.id,
-      inventario: u.inventario,
-      equipo_nombre: u.equipo_nombre,
-      marca_modelo: u.marca_modelo,
-      url: urlQr(u.qr_token),
-      svg: await qrSvg(u.qr_token),
-    }))
-  );
+}
+
+const datoEtiqueta = (u) => ({
+  id: u.id,
+  inventario: u.inventario,
+  equipo_nombre: u.equipo_nombre,
+  marca_modelo: u.marca_modelo,
+  url: urlQr(u.qr_token),
+});
+
+/** Datos para imprimir etiquetas en el navegador (con el QR en SVG). */
+async function etiquetas(filtro) {
+  const filas = await filasEtiquetas(filtro);
+  return Promise.all(filas.map(async (u) => ({ ...datoEtiqueta(u), svg: await qrSvg(u.qr_token) })));
+}
+
+/** PDF con las etiquetas QR, para descargar e imprimir. */
+async function etiquetasPdf(filtro, opciones) {
+  const filas = await filasEtiquetas(filtro);
+  return require('./etiquetas-pdf').generarPdf(filas.map(datoEtiqueta), opciones);
 }
 
 module.exports = {
@@ -274,4 +288,5 @@ module.exports = {
   actualizarUnidad,
   renovarQr,
   etiquetas,
+  etiquetasPdf,
 };
