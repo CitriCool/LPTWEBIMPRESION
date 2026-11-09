@@ -196,6 +196,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .qr-vista { width: 220px; max-width: 100%; }
 .qr-vista svg, .etiqueta-qr svg { display: block; width: 100%; height: auto; }
 .qr-publico { max-width: 520px; padding: 2rem 0; }
+.importar { margin: 1.5rem 0; grid-template-columns: minmax(0, 1fr); }
+.importar > * { min-width: 0; }
+.importar input[type=file] { flex: 1 1 260px; }
+.resumen-importacion p { margin: .3rem 0; }
+.resumen-importacion .estado { margin-left: .3rem; }
+.tabla-importacion td { vertical-align: top; }
+.tabla-importacion td:nth-child(3) { min-width: 260px; white-space: normal; }
+.tabla-importacion .fila-error td { background: #fdecea; }
+.errores-fila, .avisos-fila { margin: 0; padding-left: 1.1rem; font-size: .88rem; }
+.errores-fila { color: var(--error); }
+.avisos-fila { color: #7a4f00; }
+.importacion-lista p { margin: 0; }
 .etiquetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.5cm, 1fr)); gap: .4cm; margin-top: 1rem; }
 .etiqueta { display: flex; align-items: center; gap: .3cm; border: 1px dashed var(--borde); border-radius: 6px; padding: .25cm; background: var(--blanco); break-inside: avoid; }
 .etiqueta-qr { width: 2.8cm; flex: none; }

@@ -504,6 +504,16 @@
             : '<tr><td colspan="6" class="tenue">Aún no hay equipos registrados.</td></tr>'}</tbody>
         </table>
       </div>
+      ${esAdmin ? `<div class="tarjeta pila importar">
+        <h3>Importar dispositivos desde Excel</h3>
+        <p class="tenue">Suba la planilla de registro de dispositivos (una fila por aparato). La web la revisa y muestra los errores antes de guardar;
+          al confirmar crea los equipos, las unidades y sus QR. <a href="/plantillas/registro-dispositivos-prestamo.xlsx" download>Descargar planilla en blanco</a></p>
+        <form id="form-importar" class="filtros">
+          <input type="file" name="planilla" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required aria-label="Planilla Excel">
+          <button class="boton boton-sm" type="submit">Revisar planilla</button>
+        </form>
+        <div id="resultado-importacion"></div>
+      </div>` : ''}
       ${esAdmin ? `<div class="detalle-grid inventario-alta">
         <form class="tarjeta pila" id="form-equipo-nuevo"><h3>Nuevo equipo</h3>${camposEquipo({}, categorias, true)}
           <button class="boton" type="submit">Crear equipo</button></form>
@@ -528,6 +538,7 @@
       location.hash = `unidad/${u.id}`;
     });
     if (!esAdmin) return;
+    conectarImportacion();
     enviar($('#form-equipo-nuevo'), async (d) => {
       const r = await llamar('/admin/api/equipos', { method: 'POST', body: d });
       aviso('Equipo creado; ahora agregue sus unidades');
@@ -545,6 +556,110 @@
       aviso('Categoría agregada');
       cargarEquipos();
     });
+  }
+
+  // ---------- Importar dispositivos desde Excel ----------
+  const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  // La planilla viaja tal cual como cuerpo de la petición (api() solo envía JSON)
+  async function subirPlanilla(url, archivo) {
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'Content-Type': XLSX },
+      body: archivo,
+    });
+    const datos = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      usuario = null;
+      mostrar('vista-login');
+    }
+    if (!res.ok && !datos.revision) throw new Error(datos.error || 'No se pudo procesar la planilla.');
+    return { ok: res.ok, datos };
+  }
+
+  const ESTADO_IMPORTADO = { disponible: 'Disponible', mantencion: 'En mantención', baja: 'De baja' };
+
+  function tablaRevision(r) {
+    const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+    const nuevos = r.equipos_nuevos.length;
+    const existentes = r.equipos_existentes.length;
+    return `<div class="resumen-importacion">
+        <p><b>${plural(r.total, 'dispositivo', 'dispositivos')}</b> en la planilla:
+          <span class="estado tono-verde">${r.validas} correcto(s)</span>
+          ${r.con_error ? `<span class="estado tono-rojo">${r.con_error} con errores</span>` : ''}</p>
+        ${r.validas ? `<p class="tenue">${nuevos ? `Se ${nuevos === 1 ? 'creará' : 'crearán'} ${plural(nuevos, 'equipo nuevo', 'equipos nuevos')}` : 'No se crean equipos nuevos'}${existentes ? ` y se agregarán unidades a ${plural(existentes, 'equipo existente', 'equipos existentes')}` : ''}${
+          r.categorias_nuevas.length ? `; tipos nuevos: ${r.categorias_nuevas.map(esc).join(', ')}` : ''}.
+          ${nuevos ? `Los equipos nuevos quedan sin costo y con plazo de ${r.defectos.dias_max} días; se puede cambiar después en cada equipo.` : ''}</p>` : ''}
+      </div>
+      <div class="tabla-env"><table class="tabla-importacion">
+        <thead><tr><th>Fila</th><th>ID</th><th>Revisión</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Serie · Ubicación</th></tr></thead>
+        <tbody>${r.filas
+          .map((f) => `<tr class="${f.errores.length ? 'fila-error' : ''}">
+            <td class="num">${f.fila}</td><td><b>${esc(f.inventario)}</b></td>
+            <td>${f.errores.length
+              ? `<ul class="errores-fila">${f.errores.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>`
+              : `<span class="estado tono-verde">${f.equipo === 'nuevo' ? 'OK · equipo nuevo' : 'OK · equipo existente'}</span>`}
+              ${f.avisos.length ? `<ul class="avisos-fila">${f.avisos.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</td>
+            <td>${esc(f.nombre)}${f.marca_modelo ? `<br><small class="tenue">${esc(f.marca_modelo)}</small>` : ''}</td>
+            <td>${esc(f.tipo)}</td><td>${ESTADO_IMPORTADO[f.estado] || ''}</td>
+            <td><small>${[f.serie, f.ubicacion].filter(Boolean).map(esc).join(' · ')}</small></td></tr>`)
+          .join('')}</tbody>
+      </table></div>`;
+  }
+
+  function conectarImportacion() {
+    const form = $('#form-importar');
+    const caja = $('#resultado-importacion');
+    let archivo = null;
+
+    function mostrarRevision(r) {
+      caja.innerHTML = `${tablaRevision(r)}
+        <div class="acciones">${r.con_error
+          ? '<p class="error">Corrija las filas marcadas en el Excel y vuelva a subirlo. No se guardó nada.</p>'
+          : `<button class="boton" type="button" id="confirmar-importacion">Importar ${r.total} dispositivo(s) y generar sus QR</button>`}
+          <button class="boton boton-claro" type="button" id="cancelar-importacion">Cancelar</button></div>`;
+      $('#cancelar-importacion').addEventListener('click', () => {
+        caja.innerHTML = '';
+        form.reset();
+      });
+      $('#confirmar-importacion')?.addEventListener('click', async (ev) => {
+        ev.target.disabled = true;
+        try {
+          const { ok, datos } = await subirPlanilla('/admin/api/equipos/importar', archivo);
+          if (!ok) return mostrarRevision(datos.revision);
+          form.reset();
+          const pdf = `/admin/api/unidades/etiquetas.pdf?ids=${datos.unidades.join(',')}`;
+          caja.innerHTML = `<div class="importacion-lista pila">
+            <p><span class="estado tono-verde">Listo</span> Se registraron <b>${datos.unidades.length} dispositivo(s)</b> con su QR
+              (${datos.equipos_nuevos} equipo(s) nuevo(s)${datos.categorias_nuevas ? `, ${datos.categorias_nuevas} tipo(s) nuevo(s)` : ''}).</p>
+            <p>Imprima las etiquetas, recórtelas y péguelas en cada aparato.</p>
+            <div class="acciones"><a class="boton" href="${pdf}" download>Descargar PDF con los QR</a>
+              <button class="boton boton-claro" type="button" id="ver-equipos">Ver equipos</button></div></div>`;
+          $('#ver-equipos').addEventListener('click', () => cargarEquipos());
+          aviso('Dispositivos importados');
+        } catch (e) {
+          ev.target.disabled = false;
+          aviso(e.message);
+        }
+      });
+    }
+
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      archivo = form.planilla.files[0];
+      if (!archivo) return;
+      if (!/\.xlsx$/i.test(archivo.name)) return aviso('Suba la planilla en formato Excel (.xlsx).');
+      if (archivo.size > 5 * 1024 * 1024) return aviso('La planilla supera los 5 MB.');
+      caja.innerHTML = '<p class="tenue">Revisando planilla…</p>';
+      try {
+        const { datos } = await subirPlanilla('/admin/api/equipos/importar/revisar', archivo);
+        mostrarRevision(datos);
+      } catch (e) {
+        caja.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+      }
+    });
+    form.planilla.addEventListener('change', () => form.planilla.files[0] && form.requestSubmit());
   }
 
   async function cargarEquipo(id) {
@@ -567,7 +682,8 @@
                     .join('')
                 : '<tr><td colspan="4" class="tenue">Sin unidades. Agregue cada aparato con su n° de inventario.</td></tr>'}</tbody>
             </table></div>
-            ${e.unidades.length ? `<p><a class="boton boton-claro" href="#etiquetas/equipo/${e.id}">Imprimir etiquetas QR</a></p>` : ''}
+            ${e.unidades.length ? `<p class="acciones"><a class="boton boton-claro" href="#etiquetas/equipo/${e.id}">Imprimir etiquetas QR</a>
+              <a class="boton boton-claro" href="/admin/api/equipos/${e.id}/etiquetas.pdf" download>Descargar PDF con los QR</a></p>` : ''}
           </div>
           ${esAdmin ? `<form class="tarjeta pila" id="form-unidad-nueva"><h3>Agregar unidad</h3>${camposUnidad({}, true)}
             <button class="boton" type="submit">Agregar unidad</button></form>` : ''}

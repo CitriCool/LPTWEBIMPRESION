@@ -7,6 +7,7 @@ const usuarios = require('../lib/usuarios');
 const mailer = require('../lib/mailer');
 const { limpiar, idEnRuta } = require('../lib/validacion');
 const { ErrorCotizacion } = require('../lib/cotizador');
+const { XLSX } = require('./equipos');
 
 const router = express.Router();
 
@@ -38,10 +39,12 @@ function requiereAdmin(req, res, next) {
   res.status(403).json({ error: 'Solo un administrador puede hacer esto.' });
 }
 
-// Las acciones que modifican datos solo aceptan JSON: junto con la cookie
-// SameSite=Strict evita que otro sitio las dispare con un formulario (CSRF).
+// Las acciones que modifican datos solo aceptan JSON (o la planilla .xlsx de la
+// importación de equipos): junto con la cookie SameSite=Strict evita que otro
+// sitio las dispare con un formulario (CSRF).
 function soloJson(req, res, next) {
   if (['GET', 'HEAD'].includes(req.method) || req.is('application/json')) return next();
+  if (/^\/equipos\/importar(\/revisar)?$/.test(req.path) && req.is(XLSX)) return next();
   res.status(415).json({ error: 'Se esperaba JSON.' });
 }
 

@@ -90,7 +90,14 @@ En el panel, la pestaña *Equipos* registra lo que se presta (notebooks, drones,
 - **Etiquetas QR:** se imprimen por equipo o por unidad. El QR apunta a `PUBLIC_URL/q/<código>`: un
   operador con sesión iniciada llega directo a la ficha de la unidad; cualquier otra persona solo ve
   qué equipo es y a quién devolverlo. Si una etiqueta se pierde, "generar QR nuevo" anula la anterior.
-  Defina `PUBLIC_URL` con el dominio real antes de imprimir etiquetas.
+  Defina `PUBLIC_URL` con el dominio real antes de imprimir etiquetas. También se puede descargar
+  un PDF con las etiquetas (hoja A4, 24 por hoja) para imprimir y recortar.
+- **Importar desde Excel:** *Equipos › Importar dispositivos desde Excel* recibe la planilla de registro
+  de dispositivos (`public/plantillas/registro-dispositivos-prestamo.xlsx`, una fila por aparato:
+  ID, nombre, tipo, marca/modelo, serie, ubicación, estado, accesorios). La web revisa cada fila
+  (obligatorios, ID repetido o ya registrado, estado válido) y muestra los errores sin guardar nada;
+  al confirmar crea en una sola transacción los tipos y equipos que falten (sin costo y con plazo de
+  3 días, editables después), las unidades con su QR, y ofrece el PDF con todas las etiquetas.
 
 Cualquier operador consulta el inventario; solo un administrador lo modifica.
 
@@ -184,6 +191,9 @@ app/
   src/lib/mailer.js      plantillas y envío de correos
   src/lib/validacion.js  datos del cliente y RUT chileno
   src/lib/equipos.js     inventario de equipos en préstamo y QR de cada unidad
+  src/lib/importar-equipos.js  importación de dispositivos desde la planilla Excel
+  src/lib/xlsx.js        lector mínimo de planillas .xlsx
+  src/lib/etiquetas-pdf.js  PDF con las etiquetas QR (A4, 3 × 8)
   src/lib/prestamos.js   solicitudes, disponibilidad por fechas, aprobación y calendario
   src/lib/recordatorios.js  recordatorios de devolución por correo (cada 15 min)
   src/routes/publico.js  /api/config, /api/cotizar, /api/pedidos, /api/seguimiento
